@@ -1,0 +1,242 @@
+@import "tailwindcss";
+
+:root {
+  --bg-terminal: #080A0F;
+  --panel-slate: #0D1017;
+  --cyan-cyber: #00E5FF;
+  --border-tech: #1F1F2E;
+  --border-tech-active: #2D2D44;
+
+  --vp-primary: #5322FF;
+  --vp-secondary: #00E5FF;
+  --vp-tertiary: #00E676;
+  --vp-strata-0: #080A0F;
+  --vp-strata-1: #0D1017;
+  --vp-strata-2: #1A2026;
+  --vp-border-sharp: #1F1F2E;
+  --vp-border-accent: #2D2D44;
+  --vp-font-brand: 'JetBrains Mono', monospace;
+  --vp-font-body: 'JetBrains Mono', 'Inter', monospace;
+  --vp-font-telemetry: 'JetBrains Mono', 'Space Grotesk', monospace;
+}
+
+/* ============================================================================
+   CYBERNETIC SWISS BRUTALISM — ZERO SOFT RADIUS & ZERO DROP-SHADOW CONSTITUTION
+   + MOBILE AUTO-SCALE VIEWPORT CONTAINMENT
+   ============================================================================ */
+*,
+*::before,
+*::after {
+  border-radius: 0px !important;
+  box-sizing: border-box;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+@layer base {
+  body {
+    font-family: var(--vp-font-brand);
+    background-color: var(--bg-terminal);
+    color: #F3F6F9;
+    margin: 0;
+    padding: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  .font-mono-brand {
+    font-family: var(--vp-font-brand);
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+
+  .font-telemetry {
+    font-family: var(--vp-font-telemetry);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Prevent any grid or flex child from overflowing its track on narrow mobile screens */
+.grid > *,
+.flex > * {
+  min-width: 0;
+}
+
+/* Vệt cắt cơ khí 45 độ cho Thẻ Card & Button (Cybernetic Swiss Brutalism) */
+.clip-chamfer-brutalist {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 12px) 0,
+    100% 12px,
+    100% 100%,
+    0 100%
+  );
+}
+
+.clip-button-chamfer {
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - 8px),
+    calc(100% - 8px) 100%,
+    0 100%
+  );
+}
+
+/* 45-Degree Mechanical Chamfer Cuts (Cybernetic Neo-Brutalism) */
+.vp-chamfer {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 10px) 0,
+    100% 10px,
+    100% 100%,
+    10px 100%,
+    0 calc(100% - 10px)
+  );
+}
+
+.vp-chamfer-sm {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 6px) 0,
+    100% 6px,
+    100% 100%,
+    6px 100%,
+    0 calc(100% - 6px)
+  );
+}
+
+/* 1px Sharp Swiss Grid Borders */
+.vp-border-1px {
+  border: 1px solid var(--vp-border-accent);
+}
+
+.vp-divider-1px {
+  border-color: var(--vp-border-sharp);
+}
+
+/* Dual-Engine Fluid Typography Tokens (Auto-Scale from 320px Mobile to 1440px Desktop) */
+.vp-display {
+  font-family: var(--vp-font-brand);
+  font-size: clamp(1.35rem, 4vw, 2.5rem);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.vp-headline-lg {
+  font-family: var(--vp-font-brand);
+  font-size: clamp(1.05rem, 2.8vw, 1.75rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.vp-headline-md {
+  font-family: var(--vp-font-brand);
+  font-size: clamp(0.95rem, 2.2vw, 1.375rem);
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.vp-body-lg {
+  font-family: var(--vp-font-body);
+  font-size: clamp(0.875rem, 1.8vw, 1rem);
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.vp-body-md {
+  font-family: var(--vp-font-body);
+  font-size: clamp(0.8125rem, 1.6vw, 0.875rem);
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+/* Telemetry & Sensor Layer (Auto-Scale on Mobile) */
+.vp-telemetry-lg {
+  font-family: var(--vp-font-telemetry);
+  font-size: clamp(1rem, 2.2vw, 1.25rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-telemetry-sm {
+  font-family: var(--vp-font-telemetry);
+  font-size: clamp(0.6875rem, 1.4vw, 0.75rem);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.vp-label-caps {
+  font-family: var(--vp-font-telemetry);
+  font-size: clamp(0.6rem, 1.2vw, 0.625rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom OLED Strata Scrollbars (Zero Radius) */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: var(--vp-strata-0);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--vp-border-accent);
+  border-radius: 0px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vp-primary);
+}
+
+/* Ergonomic Touch Target Minimum (48px height, flexible width on mobile grids) */
+.vp-touch-target {
+  min-height: 46px;
+}
+
+@media (min-width: 640px) {
+  .vp-touch-target {
+    min-width: 48px;
+    min-height: 48px;
+  }
+}
+
+/* WCAG 2.4.7 Focus Visible Indicators */
+:focus-visible {
+  outline: 2px solid var(--vp-secondary);
+  outline-offset: 2px;
+}
+
+/* Motion Sensitivity: WCAG 2.3.3 / 2.2.2 Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "3D G-MAP",
+  "description": "A 3D map that visualizes any location in the world, with support for downloading data in formats such as .JSON, .GEOJSON, and .GPX—useful for programming and video production.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
