@@ -18,20 +18,15 @@ import {
   INITIAL_FEEDBACK_REPORTS,
 } from './data/vibePathData';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
-import { VloggerFieldTab } from './components/VloggerFieldTab';
+import { LiveTelemetryView } from './components/LiveTelemetryView';
 import { EditorStudioTab } from './components/EditorStudioTab';
-import { FeedbackBugReportTab } from './components/FeedbackBugReportTab';
+import { FeedbackTab } from './components/FeedbackTab';
+import { BottomNav } from './components/BottomNav';
 import { SettingsModal } from './components/SettingsModal';
 import { SwissBrutalistHUD } from './components/SwissBrutalistHUD';
 import { ApiKeyManager, KeyConnectionStatus } from './services/apiKeyManager';
 import { sendRenderPayload } from './services/webhook';
 import {
-  Radio,
-  MapPin,
-  CloudUpload,
-  Film,
-  Bug,
-  Compass,
   CheckCircle2,
   RotateCcw,
   KeyRound,
@@ -300,8 +295,8 @@ function AppContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[#080A0F] text-[#F3F6F9] flex flex-col">
-      {/* Dynamic Brand Token Override Sheet so any custom Hex/Font immediately reflects on buttons, active tabs, and borders */}
+    <div className="min-h-screen bg-[#05050A] text-[#F3F6F9] flex flex-col rounded-none">
+      {/* Dynamic Brand Token Override Sheet */}
       <style>{`
         .bg-\\[\\#5322FF\\] { background-color: ${theme.primaryHex} !important; }
         .border-\\[\\#5322FF\\] { border-color: ${theme.primaryHex} !important; }
@@ -311,9 +306,6 @@ function AppContent() {
         .text-\\[\\#00E676\\] { color: ${theme.tertiaryHex} !important; }
         .border-\\[\\#00E676\\] { border-color: ${theme.tertiaryHex} !important; }
         .bg-\\[\\#00E676\\] { background-color: ${theme.tertiaryHex} !important; }
-        .bg-\\[\\#12161A\\], .bg-\\[\\#080A0F\\] { background-color: ${theme.strata0Hex} !important; }
-        .bg-\\[\\#1A2026\\], .bg-\\[\\#0D1017\\] { background-color: ${theme.strata1Hex} !important; }
-        .border-\\[\\#242D35\\], .border-\\[\\#1F1F2E\\], .border-\\[\\#2D2D44\\] { border-color: ${theme.borderHex} !important; }
       `}</style>
 
       {/* Sticky Header HUD with Clean Top Status Pill, Segmented Switcher, VN | EN Toggle & Quick Settings Drawer Trigger */}
@@ -360,15 +352,15 @@ function AppContent() {
         <div
           role="status"
           aria-live="polite"
-          className="max-w-[1440px] w-full mx-auto px-2.5 sm:px-6 mb-3"
+          className="max-w-[1440px] w-full mx-auto px-2.5 sm:px-6 mb-3 rounded-none"
         >
-          <div className="bg-[#0D1017] border border-[#00E5FF] p-3.5 sm:p-4 flex flex-col gap-3">
+          <div className="bg-[#0D0E17] border border-[#00E5FF] p-3.5 sm:p-4 flex flex-col gap-3 rounded-none">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-xs font-mono-brand font-bold text-[#00E5FF]">
                 <Loader2 className="w-4 h-4 animate-spin shrink-0" />
                 <span>{SYNC_STEPS[syncStepIndex]}</span>
               </div>
-              <span className="text-xs font-mono-brand text-[#00E676] font-bold">
+              <span className="text-xs font-mono-brand text-[#00FF66] font-bold">
                 Step {syncStepIndex + 1} of 3
               </span>
             </div>
@@ -380,16 +372,16 @@ function AppContent() {
                 return (
                   <div
                     key={label}
-                    className={`p-2.5 border text-xs font-mono-brand flex items-center gap-2 ${
+                    className={`p-2.5 border text-xs font-mono-brand flex items-center gap-2 rounded-none ${
                       isCurrent
-                        ? 'bg-[#080A0F] border-[#00E5FF] text-[#F3F6F9] font-bold'
+                        ? 'bg-[#05050A] border-[#00E5FF] text-white font-bold'
                         : isDone
-                        ? 'bg-[#080A0F] border-[#00E676] text-[#00E676]'
-                        : 'bg-[#080A0F]/60 border-[#1F1F2E] text-[#9BA8B8]'
+                        ? 'bg-[#05050A] border-[#00FF66] text-[#00FF66]'
+                        : 'bg-[#05050A] border-[#1F1F2E] text-[#8A8FA3]'
                     }`}
                   >
                     <span className="font-bold shrink-0">0{idx + 1}.</span>
-                    <span className="truncate">{label}</span>
+                    <span>{label}</span>
                   </div>
                 );
               })}
@@ -400,28 +392,32 @@ function AppContent() {
 
       {/* Sync Notification Toast */}
       {syncToast && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] bg-[#0D1017] border border-[#00E5FF] text-[#F3F6F9] px-4 py-2 flex items-center gap-2 text-xs font-mono-brand font-bold">
-          <CheckCircle2 className="w-4 h-4 text-[#00E676] shrink-0" />
-          <span className="truncate">{syncToast}</span>
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] bg-[#0D0E17] border border-[#00E5FF] text-white px-4 py-2 flex items-center gap-2 text-xs font-mono-brand font-bold rounded-none">
+          <CheckCircle2 className="w-4 h-4 text-[#00FF66] shrink-0" />
+          <span>{syncToast}</span>
         </div>
       )}
 
       {/* Main Content Container */}
-      <main className="flex-1 max-w-[1440px] w-full mx-auto px-2.5 sm:px-6 pb-[148px] overflow-x-hidden">
+      <main
+        className={`flex-1 max-w-[1440px] w-full mx-auto px-2.5 sm:px-6 ${
+          activeTab === 'editor' ? 'pb-10' : 'pb-16'
+        } overflow-x-hidden rounded-none`}
+      >
         {/* Quick Settings Drawer (Custom Brand Palette, Font Binding & BYOK Settings) */}
         {showQuickSettingsDrawer && (
           <section
             aria-label="Quick Settings & Brand Theme Drawer"
-            className="mb-4 bg-[#0D1017] border border-[#00E5FF] p-4 flex flex-col gap-4"
+            className="mb-4 bg-[#0D0E17] border border-[#1F1F2E] p-4 flex flex-col gap-4 rounded-none"
           >
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1F1F2E] pb-3">
               <div>
-                <h2 className="text-sm font-bold text-[#F3F6F9]">
+                <h2 className="text-sm font-bold text-white">
                   {language === 'vi'
                     ? 'Quick Settings — Nhận diện Thương hiệu (--accent-color, --font-family) & Kết nối BYOK'
                     : 'Quick Settings — Dynamic Brand Palette (--accent-color, --font-family) & BYOK'}
                 </h2>
-                <p className="text-xs text-[#9BA8B8] mt-0.5">
+                <p className="text-xs text-[#8A8FA3] mt-0.5">
                   {language === 'vi'
                     ? 'Tự động cập nhật màu nút bấm, vệt sáng đường đi 3D, tab đang chọn và đính kèm vào JSON Payload khi bấm Sync to Cloud.'
                     : 'Immediately updates buttons, 3D route polyline glow, active tabs, and injects accent_color & font_family into Sync to Cloud webhook payload.'}
@@ -432,9 +428,9 @@ function AppContent() {
                 <button
                   type="button"
                   onClick={() => setIsSettingsOpen(true)}
-                  className="min-h-[36px] px-3 bg-[#080A0F] border border-[#00E5FF] text-[#00E5FF] hover:bg-[#00E5FF] hover:text-[#080A0F] text-xs font-mono-brand font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                  className="min-h-[36px] px-3 bg-[#05050A] border border-[#1F1F2E] hover:border-[#00E5FF] text-[#8A8FA3] hover:text-white text-xs font-mono-brand font-bold flex items-center gap-1.5 cursor-pointer transition-colors rounded-none"
                 >
-                  <KeyRound className="w-3.5 h-3.5 shrink-0" />
+                  <KeyRound className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
                   <span>
                     {keyStatus.hasCustomMapKey ||
                     keyStatus.hasCustomDifyKey ||
@@ -447,7 +443,7 @@ function AppContent() {
                 <button
                   type="button"
                   onClick={resetTheme}
-                  className="min-h-[36px] px-3 bg-[#080A0F] border border-[#1F1F2E] hover:border-[#00E5FF] text-[#F3F6F9] text-xs font-mono-brand flex items-center gap-1.5 cursor-pointer"
+                  className="min-h-[36px] px-3 bg-[#05050A] border border-[#1F1F2E] hover:border-[#00E5FF] text-white text-xs font-mono-brand flex items-center gap-1.5 cursor-pointer rounded-none"
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-[#00E5FF]" />
                   <span>Reset Brand</span>
@@ -456,7 +452,7 @@ function AppContent() {
                 <button
                   type="button"
                   onClick={() => setShowQuickSettingsDrawer(false)}
-                  className="min-h-[36px] px-3 bg-[#080A0F] border border-[#1F1F2E] hover:border-[#FF5252] text-[#F3F6F9] text-xs font-mono-brand cursor-pointer"
+                  className="min-h-[36px] px-3 bg-[#05050A] border border-[#1F1F2E] hover:border-[#FF5252] text-white text-xs font-mono-brand cursor-pointer rounded-none"
                 >
                   Close
                 </button>
@@ -465,11 +461,11 @@ function AppContent() {
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {/* 1. Custom Brand Accent Color (--accent-color) */}
-              <div className="bg-[#080A0F] border border-[#1F1F2E] p-3 space-y-2">
+              <div className="bg-[#05050A] border border-[#1F1F2E] p-3 space-y-2 rounded-none">
                 <div className="flex items-center justify-between">
                   <label
                     htmlFor="brand-accent-input"
-                    className="text-xs font-bold text-[#F3F6F9]"
+                    className="text-xs font-bold text-white"
                   >
                     Brand Accent Color (--accent-color)
                   </label>
@@ -478,7 +474,7 @@ function AppContent() {
                     aria-label="Brand Accent Color Picker"
                     value={/^#[0-9A-Fa-f]{6}$/.test(accentColor) ? accentColor : '#00E5FF'}
                     onChange={(e) => setAccentColor(e.target.value.toUpperCase())}
-                    className="w-6 h-6 bg-transparent border border-[#2D2D44] cursor-pointer"
+                    className="w-6 h-6 bg-transparent border border-[#1F1F2E] cursor-pointer rounded-none"
                   />
                 </div>
                 <input
@@ -487,15 +483,15 @@ function AppContent() {
                   value={accentColor}
                   onChange={(e) => setAccentColor(e.target.value)}
                   placeholder="#00E5FF"
-                  className="w-full min-h-[38px] px-2.5 bg-[#0D1017] border border-[#2D2D44] text-[#F3F6F9] text-xs font-mono-brand focus:border-[#00E5FF] focus:outline-none"
+                  className="w-full min-h-[38px] px-2.5 bg-[#0D0E17] border border-[#1F1F2E] text-white text-xs font-mono-brand focus:border-[#00E5FF] focus:outline-none rounded-none"
                 />
               </div>
 
               {/* 2. Custom Brand Font Family (--font-family) */}
-              <div className="bg-[#080A0F] border border-[#1F1F2E] p-3 space-y-2">
+              <div className="bg-[#05050A] border border-[#1F1F2E] p-3 space-y-2 rounded-none">
                 <label
                   htmlFor="brand-font-input"
-                  className="text-xs font-bold text-[#F3F6F9] block"
+                  className="text-xs font-bold text-white block"
                 >
                   Brand Font Family (--font-family)
                 </label>
@@ -505,16 +501,16 @@ function AppContent() {
                   value={fontFamily}
                   onChange={(e) => setFontFamily(e.target.value)}
                   placeholder="JetBrains Mono"
-                  className="w-full min-h-[38px] px-2.5 bg-[#0D1017] border border-[#2D2D44] text-[#F3F6F9] text-xs font-mono-brand focus:border-[#00E5FF] focus:outline-none"
+                  className="w-full min-h-[38px] px-2.5 bg-[#0D0E17] border border-[#1F1F2E] text-white text-xs font-mono-brand focus:border-[#00E5FF] focus:outline-none rounded-none"
                 />
               </div>
 
               {/* 3. Secondary / Sensor Accent Override */}
-              <div className="bg-[#080A0F] border border-[#1F1F2E] p-3 space-y-2">
+              <div className="bg-[#05050A] border border-[#1F1F2E] p-3 space-y-2 rounded-none">
                 <div className="flex items-center justify-between">
                   <label
                     htmlFor="brand-tertiary-input"
-                    className="text-xs font-bold text-[#F3F6F9]"
+                    className="text-xs font-bold text-white"
                   >
                     GPS & Status Highlight Color
                   </label>
@@ -524,12 +520,12 @@ function AppContent() {
                     value={
                       /^#[0-9A-Fa-f]{6}$/.test(theme.tertiaryHex)
                         ? theme.tertiaryHex
-                        : '#00E676'
+                        : '#00FF66'
                     }
                     onChange={(e) =>
                       updateTheme({ tertiaryHex: e.target.value.toUpperCase() })
                     }
-                    className="w-6 h-6 bg-transparent border border-[#2D2D44] cursor-pointer"
+                    className="w-6 h-6 bg-transparent border border-[#1F1F2E] cursor-pointer rounded-none"
                   />
                 </div>
                 <input
@@ -537,8 +533,8 @@ function AppContent() {
                   type="text"
                   value={theme.tertiaryHex}
                   onChange={(e) => updateTheme({ tertiaryHex: e.target.value })}
-                  placeholder="#00E676"
-                  className="w-full min-h-[38px] px-2.5 bg-[#0D1017] border border-[#2D2D44] text-[#F3F6F9] text-xs font-mono-brand focus:border-[#00E5FF] focus:outline-none"
+                  placeholder="#00FF66"
+                  className="w-full min-h-[38px] px-2.5 bg-[#0D0E17] border border-[#1F1F2E] text-white text-xs font-mono-brand focus:border-[#00E5FF] focus:outline-none rounded-none"
                 />
               </div>
             </div>
@@ -547,7 +543,7 @@ function AppContent() {
 
         {/* Active Subsystem Viewport */}
         {activeTab === 'vlogger' && (
-          <VloggerFieldTab
+          <LiveTelemetryView
             nodes={nodes}
             waypoints={waypoints}
             telemetry={telemetry}
@@ -577,7 +573,7 @@ function AppContent() {
         )}
 
         {activeTab === 'feedback' && (
-          <FeedbackBugReportTab
+          <FeedbackTab
             reports={feedbackReports}
             onAddReport={(rep) => setFeedbackReports((prev) => [rep, ...prev])}
             language={language}
@@ -585,101 +581,10 @@ function AppContent() {
         )}
       </main>
 
-      {/* Bottom Ergonomic Thumb Bar (Responsive across mobile & desktop) */}
-      <nav
-        aria-label="Ergonomic Thumb Zone Controls"
-        className="fixed bottom-0 left-0 right-0 z-40 bg-[#080A0F]/95 border-t border-[#1F1F2E] px-2.5 sm:px-6 py-2"
-      >
-        <div className="max-w-[1440px] w-full mx-auto flex flex-col gap-1.5">
-          {/* Upper Row: Field Controls */}
-          <div className="grid grid-cols-4 gap-1.5 sm:gap-2 items-center">
-            <button
-              type="button"
-              onClick={() => setIsTracking((t) => !t)}
-              className={`min-h-[40px] px-2 font-mono-brand text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer clip-button-chamfer ${
-                isTracking
-                  ? 'bg-[#00E5FF] text-[#080A0F] border border-[#00E5FF]'
-                  : 'bg-[#0D1017] text-[#F3F6F9] border border-[#1F1F2E]'
-              }`}
-            >
-              <Radio className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">{isTracking ? 'Tracking On' : 'Standby'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleQuickPinFromAnchor}
-              className="min-h-[40px] px-2 bg-[#0D1017] hover:bg-[#00E5FF] border border-[#00E5FF] text-[#00E5FF] hover:text-[#080A0F] font-mono-brand text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer clip-button-chamfer"
-            >
-              <MapPin className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">+ Pin POI</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setLanguage((l) => (l === 'vi' ? 'en' : 'vi'))}
-              className="min-h-[40px] px-2 bg-[#0D1017] hover:border-[#00E5FF] border border-[#1F1F2E] text-[#F3F6F9] font-mono-brand text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-            >
-              <Compass className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
-              <span className="truncate">{language === 'vi' ? 'VN' : 'EN'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSyncToCloud()}
-              disabled={isSyncing}
-              className="min-h-[40px] px-2 bg-[#00E5FF] hover:opacity-90 border border-[#00E5FF] text-[#080A0F] font-mono-brand text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer clip-button-chamfer"
-            >
-              <CloudUpload className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">
-                {isSyncing ? 'Syncing...' : 'Sync to Cloud'}
-              </span>
-            </button>
-          </div>
-
-          {/* Lower Row: Workspace Switcher */}
-          <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveTab('vlogger')}
-              className={`min-h-[38px] px-2 border font-mono-brand text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                activeTab === 'vlogger'
-                  ? 'bg-[#00E5FF] border-[#00E5FF] text-[#080A0F]'
-                  : 'bg-[#0D1017] border-[#1F1F2E] text-[#F3F6F9] hover:border-[#00E5FF]'
-              }`}
-            >
-              <MapPin className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Field Tracker View</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('editor')}
-              className={`min-h-[38px] px-2 border font-mono-brand text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                activeTab === 'editor'
-                  ? 'bg-[#00E5FF] border-[#00E5FF] text-[#080A0F]'
-                  : 'bg-[#0D1017] border-[#1F1F2E] text-[#F3F6F9] hover:border-[#00E5FF]'
-              }`}
-            >
-              <Film className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Editor Studio</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('feedback')}
-              className={`min-h-[38px] px-2 border font-mono-brand text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                activeTab === 'feedback'
-                  ? 'bg-[#00E5FF] border-[#00E5FF] text-[#080A0F]'
-                  : 'bg-[#0D1017] border-[#1F1F2E] text-[#F3F6F9] hover:border-[#00E5FF]'
-              }`}
-            >
-              <Bug className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Feedback</span>
-            </button>
-          </div>
-        </div>
-      </nav>
+      {/* Global Navigation Bar — Unmounted on Editor Studio to prevent double-dock overlap */}
+      {activeTab !== 'editor' && (
+        <BottomNav activeTab={activeTab} onChangeTab={setActiveTab} />
+      )}
 
       {/* BYOK Personal Connection Settings Modal */}
       <SettingsModal

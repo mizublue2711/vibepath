@@ -326,15 +326,24 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
   };
 
   return (
-    <div ref={containerRef} className="relative w-full max-w-full select-none">
-      <div className="flex items-stretch w-full bg-[#090D11]/90 border border-slate-800/70 rounded-lg focus-within:border-[var(--accent-color)] transition-colors overflow-hidden">
-        <div className="px-3 flex items-center justify-center border-r border-slate-800/70 bg-[#121820]/80 shrink-0">
+    <div ref={containerRef} className="relative w-full max-w-full select-none rounded-none">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="font-mono text-[10px] font-bold tracking-widest text-[#8A8FA3] uppercase">
+          [ 01 // GEO_INDEX_LOOKUP ]
+        </span>
+        <span className="font-mono text-[10px] text-[#8A8FA3] hidden sm:inline">
+          MAPBOX_V6 // GLOBAL_POI_INDEX
+        </span>
+      </div>
+
+      <div className="flex items-stretch w-full bg-[#05050A] border border-[#1F1F2E] rounded-none focus-within:border-[#00E5FF] transition-colors overflow-hidden">
+        <div className="px-3 flex items-center justify-center border-r border-[#1F1F2E] bg-[#0D0E17] shrink-0 rounded-none">
           {isLoading ? (
-            <Loader2 className="w-4 h-4 text-[var(--accent-color)] animate-spin" />
+            <Loader2 className="w-4 h-4 text-[#00E5FF] animate-spin" />
           ) : query.includes('http') || query.includes('@') ? (
-            <Link2 className="w-4 h-4 text-[#00E676]" />
+            <Link2 className="w-4 h-4 text-[#00FF66]" />
           ) : (
-            <Search className="w-4 h-4 text-slate-400" />
+            <Search className="w-4 h-4 text-[#8A8FA3]" />
           )}
         </div>
 
@@ -348,14 +357,9 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
           }}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder={
-            placeholder ||
-            (language === 'vi'
-              ? 'Tìm quán ăn, địa chỉ đường phố (VD: Phở Bò Phú Gia, Highlands Coffee)...'
-              : 'Search restaurants, street addresses, or landmarks (e.g., Phở Bò Phú Gia)...')
-          }
+          placeholder={placeholder || 'SEARCH_COORDINATES_OR_POI...'}
           aria-label="Search POI Locations"
-          className="flex-1 min-w-0 min-h-[42px] px-3 bg-transparent text-[#F8FAFC] text-xs font-medium placeholder:text-slate-400 focus:outline-none"
+          className="flex-1 min-w-0 min-h-[40px] px-3 bg-transparent text-[#FFFFFF] font-mono text-xs placeholder:text-[#8A8FA3] focus:outline-none rounded-none"
         />
 
         {query && (
@@ -366,7 +370,7 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
               setResults([]);
               setIsOpen(false);
             }}
-            className="px-2.5 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
+            className="px-2.5 text-[#8A8FA3] hover:text-white flex items-center justify-center cursor-pointer rounded-none"
             title="Clear search"
           >
             <X className="w-3.5 h-3.5" />
@@ -382,12 +386,17 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
               executeMapboxSearch(query);
             }
           }}
-          style={{ backgroundColor: 'var(--accent-color)' }}
-          className="px-3.5 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer hover:brightness-110 transition-all shrink-0"
+          className="px-3.5 bg-[#0D0E17] border-l border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)] font-mono text-xs uppercase tracking-wider font-bold flex items-center gap-1.5 cursor-pointer transition-all shrink-0 rounded-none"
         >
           <CornerDownLeft className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden sm:inline">
-            {isLoading ? (language === 'vi' ? 'Đang tìm...' : 'Searching...') : language === 'vi' ? 'Tìm địa điểm' : 'Search'}
+          <span className="hidden sm:inline whitespace-nowrap">
+            {isLoading
+              ? language === 'vi'
+                ? 'ĐANG TÌM...'
+                : 'SEARCHING...'
+              : language === 'vi'
+              ? 'Tìm địa điểm'
+              : 'Find POI'}
           </span>
         </button>
       </div>
@@ -396,7 +405,7 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
         <div
           role="listbox"
           aria-label="Location Search Results"
-          className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#121820]/95 backdrop-blur-md border border-slate-700/80 rounded-lg shadow-2xl divide-y divide-slate-800/60 max-h-[320px] overflow-y-auto"
+          className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#0D0E17] border border-[#1F1F2E] rounded-none divide-y divide-[#1F1F2E] max-h-[320px] overflow-y-auto"
         >
           {results.slice(0, 8).map((item, idx) => {
             const indexLabel = String(idx + 1).padStart(2, '0');
@@ -410,28 +419,27 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
                 aria-selected={isHighlighted}
                 onClick={() => handleSelectResult(item)}
                 onMouseEnter={() => setActiveIndex(idx)}
-                className={`w-full px-3.5 py-2.5 text-left flex items-start justify-between gap-3 cursor-pointer transition-colors ${
-                  isHighlighted ? 'bg-slate-800/70' : 'hover:bg-slate-800/40'
+                className={`w-full px-3.5 py-2.5 text-left flex items-start justify-between gap-3 cursor-pointer transition-colors rounded-none ${
+                  isHighlighted
+                    ? 'bg-[#171825] border-l-2 border-l-[#00E5FF]'
+                    : 'hover:bg-[#141622]'
                 }`}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold text-slate-100 flex items-center gap-2 break-words">
-                    <span
-                      style={{ color: 'var(--accent-color)' }}
-                      className="font-telemetry text-[11px] font-bold shrink-0"
-                    >
-                      {indexLabel}.
+                  <div className="font-mono text-xs font-bold text-white flex items-center gap-2 break-words">
+                    <span className="font-mono text-[11px] font-bold text-[#00E5FF] shrink-0">
+                      [ {indexLabel} ]
                     </span>
-                    <span className="truncate">{item.name}</span>
+                    <span className="uppercase">{item.name}</span>
                   </div>
-                  <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                  <div className="font-mono text-[11px] text-[#8A8FA3] mt-0.5">
                     {item.address}
                   </div>
                 </div>
 
-                <div className="shrink-0 text-right font-telemetry tabular-nums">
-                  <div className="text-[11px] text-[#00E676] font-semibold flex items-center justify-end gap-1">
-                    <Crosshair className="w-3 h-3 text-[#00E676] shrink-0" />
+                <div className="shrink-0 text-right font-mono tabular-nums">
+                  <div className="text-[11px] text-[#00FF66] font-bold flex items-center justify-end gap-1">
+                    <Crosshair className="w-3 h-3 text-[#00FF66] shrink-0" />
                     <span>
                       {lat.toFixed(4)}°N, {lng.toFixed(4)}°E
                     </span>

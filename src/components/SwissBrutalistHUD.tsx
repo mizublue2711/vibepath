@@ -75,26 +75,26 @@ export const SwissBrutalistHUD: React.FC<HUDProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full max-w-full bg-[#080A0F]/95 backdrop-blur-sm border-b border-[#1F1F2E] text-[#F3F6F9] select-none mb-3">
+    <header className="sticky top-0 z-40 w-full max-w-full bg-[#05050A]/95 backdrop-blur-sm border-b border-[#1F1F2E] text-[#F3F6F9] select-none mb-3 rounded-none shadow-none">
       {/* 1. Single Clean High-Tech Top Status Pill */}
-      <div className="w-full bg-[#0D1017] border-b border-[#1F1F2E] px-3 sm:px-6 py-1.5">
+      <div className="w-full bg-[#0D0E17] border-b border-[#1F1F2E] px-3 sm:px-6 py-1.5 rounded-none">
         <div className="max-w-[1440px] mx-auto flex flex-wrap items-center justify-between gap-2 text-xs font-mono-brand">
           <div
             role="status"
             aria-label="System Status Pill"
             className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[#F3F6F9] font-semibold tracking-tight"
           >
-            <span className="text-[#00E676] font-bold">
+            <span className="text-[#00FF66] font-bold">
               [🟢 GPS Locked • ±{accuracyM.toFixed(1)}m]
             </span>
-            <span className="text-[#9BA8B8]">|</span>
+            <span className="text-[#8A8FA3]">|</span>
             <span className="text-[#00E5FF] font-bold">[{districtLabel}]</span>
-            <span className="text-[#9BA8B8]">|</span>
-            <span className="text-[#F3F6F9] font-bold">[4K 60FPS Sync Ready]</span>
+            <span className="text-[#8A8FA3]">|</span>
+            <span className="text-white font-bold">[4K 60FPS Sync Ready]</span>
           </div>
 
           {lastExportFile && (
-            <span className="text-[11px] font-bold px-2 py-0.5 bg-[#080A0F] border border-[#00E676] text-[#00E676] truncate">
+            <span className="text-[11px] font-bold px-2 py-0.5 bg-[#05050A] border border-[#00FF66] text-[#00FF66] rounded-none">
               Exported: {lastExportFile}
             </span>
           )}
@@ -102,25 +102,29 @@ export const SwissBrutalistHUD: React.FC<HUDProps> = ({
       </div>
 
       {/* 2. Sticky Header HUD Controls: Segmented Switcher, Language Toggle (VN | EN), Quick Settings Drawer & Sync */}
-      <div className="max-w-[1440px] mx-auto px-3 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-2.5">
-        {/* Segmented Switcher: Field Tracker View vs. Editor Studio */}
+      <div className="max-w-[1440px] mx-auto px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2.5">
+        {/* Segmented Switcher: Field Tracker View vs. Editor Studio vs. Feedback */}
         <div
           role="tablist"
           aria-label="Workspace View Switcher"
-          className="bg-[#0D1017] border border-[#1F1F2E] p-1 flex items-center gap-1 flex-wrap"
+          className="bg-[#0D0E17] border border-[#1F1F2E] p-1 flex items-center gap-1 flex-wrap rounded-none shadow-none"
         >
           <button
             type="button"
             role="tab"
             aria-selected={activeTab === 'vlogger'}
             onClick={() => onChangeTab?.('vlogger')}
-            className={`min-h-[36px] px-3 text-xs font-mono-brand font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+            className={`min-h-[34px] px-3 border border-[#1F1F2E] font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors rounded-none shadow-none ${
               activeTab === 'vlogger'
-                ? 'bg-[#00E5FF] text-[#080A0F]'
-                : 'text-[#F3F6F9] hover:text-[#00E5FF]'
+                ? 'bg-[#05050A] text-white border-b-2 border-b-[#00E5FF]'
+                : 'bg-[#0D0E17] text-[#8A8FA3] hover:text-white hover:border-[#00E5FF]'
             }`}
           >
-            <MapPin className="w-3.5 h-3.5 shrink-0" />
+            <MapPin
+              className={`w-3.5 h-3.5 shrink-0 ${
+                activeTab === 'vlogger' ? 'text-[#00E5FF]' : 'text-[#8A8FA3]'
+              }`}
+            />
             <span>Field Tracker View</span>
           </button>
 
@@ -129,13 +133,17 @@ export const SwissBrutalistHUD: React.FC<HUDProps> = ({
             role="tab"
             aria-selected={activeTab === 'editor'}
             onClick={() => onChangeTab?.('editor')}
-            className={`min-h-[36px] px-3 text-xs font-mono-brand font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+            className={`min-h-[34px] px-3 border border-[#1F1F2E] font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors rounded-none shadow-none ${
               activeTab === 'editor'
-                ? 'bg-[#00E5FF] text-[#080A0F]'
-                : 'text-[#F3F6F9] hover:text-[#00E5FF]'
+                ? 'bg-[#05050A] text-white border-b-2 border-b-[#00E5FF]'
+                : 'bg-[#0D0E17] text-[#8A8FA3] hover:text-white hover:border-[#00E5FF]'
             }`}
           >
-            <Film className="w-3.5 h-3.5 shrink-0" />
+            <Film
+              className={`w-3.5 h-3.5 shrink-0 ${
+                activeTab === 'editor' ? 'text-[#00E5FF]' : 'text-[#8A8FA3]'
+              }`}
+            />
             <span>Editor Studio</span>
           </button>
 
@@ -144,15 +152,19 @@ export const SwissBrutalistHUD: React.FC<HUDProps> = ({
             role="tab"
             aria-selected={activeTab === 'feedback'}
             onClick={() => onChangeTab?.('feedback')}
-            className={`min-h-[36px] px-2.5 text-xs font-mono-brand font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+            className={`min-h-[34px] px-2.5 border border-[#1F1F2E] font-mono text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-colors rounded-none shadow-none ${
               activeTab === 'feedback'
-                ? 'bg-[#00E5FF] text-[#080A0F]'
-                : 'text-[#9BA8B8] hover:text-[#F3F6F9]'
+                ? 'bg-[#05050A] text-white border-b-2 border-b-[#00E5FF]'
+                : 'bg-[#0D0E17] text-[#8A8FA3] hover:text-white hover:border-[#00E5FF]'
             }`}
             title="AI Bug Triage & Field Feedback"
           >
-            <Bug className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden sm:inline">Feedback</span>
+            <Bug
+              className={`w-3.5 h-3.5 shrink-0 ${
+                activeTab === 'feedback' ? 'text-[#00E5FF]' : 'text-[#8A8FA3]'
+              }`}
+            />
+            <span>Feedback</span>
           </button>
         </div>
 
@@ -162,15 +174,15 @@ export const SwissBrutalistHUD: React.FC<HUDProps> = ({
           <div
             role="group"
             aria-label="Language Toggle"
-            className="bg-[#0D1017] border border-[#1F1F2E] p-0.5 flex items-center"
+            className="bg-[#0D0E17] border border-[#1F1F2E] p-0.5 flex items-center rounded-none"
           >
             <button
               type="button"
               onClick={() => onChangeLanguage?.('vi')}
-              className={`min-h-[34px] px-2.5 text-xs font-mono-brand font-bold cursor-pointer transition-colors ${
+              className={`min-h-[32px] px-2.5 font-mono text-xs font-bold cursor-pointer transition-colors rounded-none ${
                 language === 'vi'
-                  ? 'bg-[#00E5FF] text-[#080A0F]'
-                  : 'text-[#F3F6F9] hover:text-[#00E5FF]'
+                  ? 'bg-[#05050A] text-white border-b-2 border-b-[#00E5FF]'
+                  : 'text-[#8A8FA3] hover:text-white'
               }`}
             >
               VN
@@ -179,10 +191,10 @@ export const SwissBrutalistHUD: React.FC<HUDProps> = ({
             <button
               type="button"
               onClick={() => onChangeLanguage?.('en')}
-              className={`min-h-[34px] px-2.5 text-xs font-mono-brand font-bold cursor-pointer transition-colors ${
+              className={`min-h-[32px] px-2.5 font-mono text-xs font-bold cursor-pointer transition-colors rounded-none ${
                 language === 'en'
-                  ? 'bg-[#00E5FF] text-[#080A0F]'
-                  : 'text-[#F3F6F9] hover:text-[#00E5FF]'
+                  ? 'bg-[#05050A] text-white border-b-2 border-b-[#00E5FF]'
+                  : 'text-[#8A8FA3] hover:text-white'
               }`}
             >
               EN
@@ -194,10 +206,10 @@ export const SwissBrutalistHUD: React.FC<HUDProps> = ({
             <button
               type="button"
               onClick={onToggleQuickSettings}
-              className={`min-h-[36px] px-3 border text-xs font-mono-brand font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+              className={`min-h-[34px] px-3 bg-[#0D0E17] border font-mono text-xs uppercase tracking-wider font-bold flex items-center gap-1.5 cursor-pointer transition-all rounded-none ${
                 isQuickSettingsOpen
-                  ? 'bg-[#00E5FF] border-[#00E5FF] text-[#080A0F]'
-                  : 'bg-[#0D1017] border-[#1F1F2E] hover:border-[#00E5FF] text-[#F3F6F9]'
+                  ? 'border-[#00E5FF] text-white'
+                  : 'border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF]'
               }`}
             >
               <Sliders className="w-3.5 h-3.5 shrink-0" />
@@ -205,14 +217,14 @@ export const SwissBrutalistHUD: React.FC<HUDProps> = ({
             </button>
           )}
 
-          {/* 1-Click 3D Render */}
+          {/* 1-Click 3D Render (1px stroke button glowing #00E5FF on hover) */}
           <button
             type="button"
             onClick={handleCinematicClick}
-            className={`clip-button-chamfer min-h-[36px] px-3.5 font-mono-brand font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
+            className={`min-h-[34px] px-3.5 bg-[#0D0E17] border font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer rounded-none ${
               isRenderingCinematic
-                ? 'bg-[#00E676] text-[#080A0F] border border-[#00E676]'
-                : 'bg-[#0D1017] text-[#00E5FF] hover:bg-[#00E5FF] hover:text-[#080A0F] border border-[#00E5FF]'
+                ? 'border-[#00FF66] text-[#00FF66]'
+                : 'border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)]'
             }`}
           >
             <Film className="w-3.5 h-3.5 shrink-0" />
@@ -226,13 +238,13 @@ export const SwissBrutalistHUD: React.FC<HUDProps> = ({
             type="button"
             onClick={onSync}
             disabled={isSyncing}
-            className={`clip-button-chamfer min-h-[36px] px-4 font-mono-brand font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
+            className={`min-h-[34px] px-4 bg-[#0D0E17] border font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer rounded-none ${
               isSyncing
-                ? 'bg-[#1F1F2E] text-[#9BA8B8] border border-[#2D2D44] cursor-not-allowed'
-                : 'bg-[#00E5FF] text-[#080A0F] hover:opacity-90 border border-[#00E5FF]'
+                ? 'border-[#1F1F2E] text-[#8A8FA3] cursor-not-allowed'
+                : 'border-[#00E5FF] text-white hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)]'
             }`}
           >
-            <CloudUpload className="w-3.5 h-3.5 shrink-0" />
+            <CloudUpload className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
             <span>{isSyncing ? 'Syncing...' : 'Sync to Cloud'}</span>
           </button>
         </div>

@@ -70,6 +70,7 @@ export interface CyberGlobe3DProps {
   activeStyle?: LegoGraphicStyleKey;
   onStyleChange?: (style: LegoGraphicStyleKey) => void;
   onOpenSettings?: () => void;
+  onOpenPinModal?: () => void;
 }
 
 function validateMapboxToken(rawToken: string): { valid: boolean } {
@@ -92,6 +93,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
   language = 'vi',
   autoTriggerKey = 0,
   compactMode = false,
+  onOpenPinModal,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const fallbackCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -1032,55 +1034,14 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
   };
 
   return (
-    <div className="w-full max-w-full overflow-hidden bg-[#080A0F] border border-[#1F1F2E] flex flex-col">
-      {/* Clean Minimalist Map Control Bar */}
-      <div className="bg-[#0D1017] border-b border-[#1F1F2E] px-3 py-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 min-w-0">
-          <Globe2 className="w-4 h-4 text-[#00E5FF] shrink-0" />
-          <span className="text-xs font-bold text-[#F3F6F9] tracking-wide truncate">
-            {targetDisplayPoi.name}
-          </span>
-          <span className="text-[11px] font-medium text-[#9BA8B8] hidden sm:inline">
-            • {globalDistrictScan.hudReadout || 'District 1, Ben Thanh'}
-          </span>
-        </div>
-
-        {/* Instantaneous (< 50ms) Mode Switcher Controls */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => handleSwitchMode('DEM_3D')}
-            className={`min-h-[30px] px-2.5 border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
-              activeMode === 'DEM_3D'
-                ? 'bg-[#00E5FF] border-[#00E5FF] text-[#080A0F]'
-                : 'bg-[#080A0F] border-[#1F1F2E] text-[#F3F6F9] hover:border-[#00E5FF]'
-            }`}
-          >
-            <CheckCircle2 className="w-3 h-3 shrink-0" />
-            <span>3D Terrain</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSwitchMode('CAD_3D')}
-            className={`min-h-[30px] px-2.5 border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
-              activeMode === 'CAD_3D'
-                ? 'bg-[#00E5FF] border-[#00E5FF] text-[#080A0F]'
-                : 'bg-[#080A0F] border-[#1F1F2E] text-[#F3F6F9] hover:border-[#00E5FF]'
-            }`}
-          >
-            <Layers className="w-3 h-3 shrink-0" />
-            <span>Volumetric CAD</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Unified 100% Mapbox Search Bar */}
-      <div className="bg-[#0D1017] border-b border-[#1F1F2E] px-3 py-2.5">
+    <div className="w-full max-w-full overflow-hidden bg-[#05050A] border border-[#1F1F2E] flex flex-col rounded-none">
+      {/* Search Terminal */}
+      <div className="bg-[#0D0E17] border-b border-[#1F1F2E] px-3 py-2.5 rounded-none">
         <PoiSearchBox
           onSelectLocation={handleSelectSearchLocation}
           mapCenterLngLat={[targetDisplayPoi.longitude, targetDisplayPoi.latitude]}
           language={language}
+          placeholder="SEARCH_COORDINATES_OR_POI..."
           compact={true}
         />
       </div>
@@ -1089,7 +1050,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       <div
         className={`relative w-full ${
           compactMode ? 'h-[440px]' : 'h-[78vh] min-h-[560px]'
-        } overflow-hidden bg-[#080A0F]`}
+        } overflow-hidden bg-[#05050A] rounded-none`}
       >
         <div
           ref={mapContainer}
@@ -1115,18 +1076,132 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           />
         )}
 
-        {/* Clean Minimalist Map Overlays (Zero Debug Noise) */}
+        {/* Map Viewport Overlays */}
         <div className="absolute inset-0 pointer-events-none z-10">
+          {/* Top-Left Active Target Readout */}
+          <div className="absolute top-3 left-3 bg-[#0D0E17]/90 backdrop-blur-md border border-[#1F1F2E] px-3 py-1.5 flex items-center gap-2 font-mono text-xs pointer-events-auto rounded-none">
+            <Globe2 className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
+            <span className="font-bold text-white uppercase tracking-tight">
+              {targetDisplayPoi.name}
+            </span>
+            <span className="text-[#8A8FA3] hidden sm:inline">
+              // {globalDistrictScan.hudReadout || 'District 1, Ben Thanh'}
+            </span>
+          </div>
+
+          {/* Single Horizontal Glassmorphic Toolbar Pinned to Top-Right of Map Canvas */}
+          <div
+            role="toolbar"
+            aria-label="Map Viewport Controls"
+            className="absolute top-3 right-3 bg-[#0D0E17]/90 backdrop-blur-md border border-[#1F1F2E] p-1 flex flex-wrap items-center gap-1 pointer-events-auto rounded-none"
+          >
+            <button
+              type="button"
+              onClick={() => handleSwitchMode('DEM_3D')}
+              className={`min-h-[32px] px-2.5 bg-[#0D0E17] border font-mono text-[11px] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all rounded-none whitespace-nowrap ${
+                activeMode === 'DEM_3D'
+                  ? 'border-[#00E5FF] text-[#00E5FF] shadow-[0_0_10px_rgba(0,229,255,0.22)]'
+                  : 'border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)]'
+              }`}
+            >
+              <CheckCircle2 className="w-3 h-3 shrink-0" />
+              <span>[3D Terrain]</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSwitchMode('CAD_3D')}
+              className={`min-h-[32px] px-2.5 bg-[#0D0E17] border font-mono text-[11px] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all rounded-none whitespace-nowrap ${
+                activeMode === 'CAD_3D'
+                  ? 'border-[#00E5FF] text-[#00E5FF] shadow-[0_0_10px_rgba(0,229,255,0.22)]'
+                  : 'border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)]'
+              }`}
+            >
+              <Layers className="w-3 h-3 shrink-0" />
+              <span>[Volumetric CAD]</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                CinematicFlightEngine.stopActiveFlight(mapRef.current);
+                setFlightStatus(null);
+                animCameraRef.current.targetZoom = 1.8;
+                animCameraRef.current.targetPitch = 0;
+                animCameraRef.current.targetBearing = 0;
+                setCameraTelemetry({ zoom: 1.8, pitch: 0, bearing: 0 });
+                if (mapRef.current) {
+                  mapRef.current.flyTo({
+                    center: [targetDisplayPoi.longitude, targetDisplayPoi.latitude],
+                    zoom: 1.8,
+                    pitch: 0,
+                    bearing: 0,
+                    speed: 1.2,
+                    essential: true,
+                  });
+                }
+              }}
+              className="min-h-[32px] px-2.5 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)] font-mono text-[11px] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all rounded-none whitespace-nowrap"
+            >
+              <Compass className="w-3.5 h-3.5 shrink-0" />
+              <span>[Orbit View]</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => runCinematicSequence(false)}
+              className="min-h-[32px] px-2.5 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)] font-mono text-[11px] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all rounded-none whitespace-nowrap"
+            >
+              <Rocket className="w-3.5 h-3.5 shrink-0" />
+              <span>[Flyover]</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => runCinematicSequence(true)}
+              className="min-h-[32px] px-3 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)] font-mono text-[11px] uppercase tracking-wider font-bold flex items-center gap-1.5 cursor-pointer transition-all rounded-none whitespace-nowrap"
+            >
+              <Film className="w-3.5 h-3.5 shrink-0" />
+              <span>
+                {flightStatus?.isRecording
+                  ? 'Recording 60FPS...'
+                  : 'Render 60FPS Video'}
+              </span>
+            </button>
+          </div>
+
           {/* Active Venue Pill (Bottom-Left) */}
-          <div className="absolute bottom-3 left-3 bg-[#080A0F]/95 border border-[#00E5FF] px-3 py-1.5 flex items-center gap-2 text-xs font-mono-brand font-bold pointer-events-auto">
+          <div className="absolute bottom-3 left-3 bg-[#0D0E17]/95 border border-[#1F1F2E] px-3 py-1.5 flex items-center gap-2 font-mono text-xs font-bold pointer-events-auto rounded-none">
             <MapPin className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
             <span className="text-[#00E5FF]">[ 01 // POI ]</span>
-            <span className="text-[#FFFFFF]">{targetDisplayPoi.name.toUpperCase()}</span>
+            <span className="text-white">{targetDisplayPoi.name.toUpperCase()}</span>
+          </div>
+
+          {/* Consolidated Bottom-Center Chiseled 45° "Pin POI" Action Button */}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-auto">
+            <button
+              type="button"
+              onClick={() => {
+                if (onOpenPinModal) {
+                  onOpenPinModal();
+                } else {
+                  window.dispatchEvent(new Event('vibepath_open_pin_drawer'));
+                }
+              }}
+              style={{
+                clipPath:
+                  'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
+              }}
+              className="min-h-[40px] px-5 bg-[#0D0E17] border border-[#00E5FF] text-white hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_14px_rgba(0,229,255,0.35)] font-mono text-xs uppercase tracking-wider font-bold flex items-center gap-2 cursor-pointer transition-all rounded-none whitespace-nowrap"
+            >
+              <MapPin className="w-4 h-4 text-[#00E5FF] shrink-0" />
+              <span>[ + PIN POI ]</span>
+            </button>
           </div>
 
           {/* Interactive Pinned Food POIs Selector Strip (Bottom-Right) */}
-          <div className="absolute bottom-3 right-3 hidden sm:flex flex-wrap items-center gap-1.5 pointer-events-auto max-w-[58%] justify-end">
-            {foodPois.slice(0, 4).map((poi, idx) => {
+          <div className="absolute bottom-3 right-3 hidden lg:flex flex-wrap items-center gap-1.5 pointer-events-auto max-w-[36%] justify-end">
+            {foodPois.slice(0, 3).map((poi, idx) => {
               const code = String(idx + 1).padStart(2, '0');
               const isSelected =
                 !selectedSearchPoi &&
@@ -1151,73 +1226,18 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
                       if (matched) onSelectNode(matched);
                     }
                   }}
-                  className={`min-h-[30px] px-2.5 py-1 bg-[#080A0F]/95 border text-[11px] font-mono-brand font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                  className={`min-h-[30px] px-2.5 py-1 bg-[#0D0E17] border font-mono text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-all rounded-none ${
                     isSelected
-                      ? 'border-[#00E676] text-[#00E676]'
-                      : 'border-[#1F1F2E] hover:border-[#00E5FF] text-[#F3F6F9]'
+                      ? 'border-[#00E5FF] text-white'
+                      : 'border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-white'
                   }`}
                 >
                   <span className="text-[#00E5FF]">[{code}]</span>
-                  <span className="text-[#FFFFFF] truncate max-w-[120px]">
-                    {poi.name}
-                  </span>
+                  <span className="truncate max-w-[110px]">{poi.name}</span>
                 </button>
               );
             })}
           </div>
-
-          {/* Top-Right Camera & Cinematic Render Actions */}
-          {mapReady && (
-            <div className="absolute top-3 right-3 flex flex-wrap items-center gap-1.5 pointer-events-auto">
-              <button
-                type="button"
-                onClick={() => {
-                  CinematicFlightEngine.stopActiveFlight(mapRef.current);
-                  setFlightStatus(null);
-                  animCameraRef.current.targetZoom = 1.8;
-                  animCameraRef.current.targetPitch = 0;
-                  animCameraRef.current.targetBearing = 0;
-                  setCameraTelemetry({ zoom: 1.8, pitch: 0, bearing: 0 });
-                  if (mapRef.current) {
-                    mapRef.current.flyTo({
-                      center: [targetDisplayPoi.longitude, targetDisplayPoi.latitude],
-                      zoom: 1.8,
-                      pitch: 0,
-                      bearing: 0,
-                      speed: 1.2,
-                      essential: true,
-                    });
-                  }
-                }}
-                className="min-h-[34px] px-2.5 bg-[#080A0F]/95 border border-[#1F1F2E] hover:border-[#00E5FF] text-[#F3F6F9] text-[11px] font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Compass className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
-                <span>Orbit View</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => runCinematicSequence(false)}
-                className="min-h-[34px] px-2.5 bg-[#080A0F]/95 border border-[#00E5FF] hover:bg-[#00E5FF] text-[#00E5FF] hover:text-[#080A0F] text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
-              >
-                <Rocket className="w-3.5 h-3.5 shrink-0" />
-                <span>Flyover</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => runCinematicSequence(true)}
-                className="clip-button-chamfer min-h-[34px] px-3 bg-[#00E5FF] text-[#080A0F] text-[11px] font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Film className="w-3.5 h-3.5 shrink-0" />
-                <span>
-                  {flightStatus?.isRecording
-                    ? 'Recording 60FPS...'
-                    : 'Render 60FPS Video'}
-                </span>
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>
