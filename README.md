@@ -1,85 +1,127 @@
-Báo cáo Tổng hợp Toàn bộ Cập nhật và Thay đổi Dự án VibePath
+Báo cáo Chuyên sâu: Kiến trúc Hệ thống VibePath & Tự động hóa Video Bản đồ 3D Điện ảnh
 
-Dự án VibePath (Hệ thống tự động hóa Video Bản đồ 3D và Kịch bản AI Đa ngôn ngữ cho YouTuber Ẩm thực) đã trải qua quá trình tiến hóa toàn diện từ một ý tưởng kiến trúc sơ khai đến một hệ sinh thái mô-đun dạng Lego hoàn chỉnh. Báo cáo này tổng hợp chi tiết tất cả các nâng cấp, sửa lỗi kỹ thuật, tối ưu hóa UI/UX và cải tiến hạ tầng đã được thực thi từ giai đoạn khởi tạo đến hiện tại.
+1. Bối cảnh Dự án & Sứ mệnh Khác biệt so với Google Maps Thông thường
 
-1. Tổng quan Hành trình Phát triển và Cột mốc Kiến trúc VibePath
+Trong ngành sản xuất nội dung video du lịch và trải nghiệm ẩm thực (Food Tour), việc tái hiện lộ trình di chuyển và vị trí các điểm dừng chân (POI - Points of Interest) đóng vai trò định hình trải nghiệm thị giác cho khán giả. Trước khi hệ thống VibePath ra đời, các YouTuber, Vlogger và Editor chuyên nghiệp phải đối mặt với quy trình thủ công phức tạp: vẽ đồ họa chuyển động thủ công trên Adobe After Effects, thao tác quay màn hình trên Google Earth Studio, hoặc gõ thủ công từng dòng phụ đề và mốc thời gian trên phần mềm dựng phim.
 
-Hệ thống VibePath được thiết kế nhằm giải quyết triệt để các rào cản thủ công của các nhà sáng tạo nội dung ẩm thực: chuyển đổi dữ liệu định vị di chuyển (GPS Telemetry) và các điểm dừng chân (Food POIs) thành thước phim bản đồ 3D 60FPS mượt mà, đi kèm kịch bản lời thoại voiceover, phụ đề song ngữ .SRT, YouTube Chapters và Captions truyền thông xã hội.
+Các nền tảng bản đồ thương mại thông dụng như Google Maps được thiết kế chuyên biệt cho tác vụ điều hướng giao thông, hoàn toàn không đáp ứng được yêu cầu dàn dựng video điện ảnh. Việc so sánh đối chiếu giữa Google Maps thông thường và VibePath làm nổi bật giá trị cốt lõi của giải pháp:
 
-Mô hình Kiến trúc 3 Tầng Cơ bản
+Bảng So sánh Đối chiếu Kiến trúc & Tính năng
 
-1. Tầng Client & Edge: Bản ứng dụng Web Demo triển khai trên Cloudflare Workers (vibepath.mizu2711.workers.dev) và mô hình định hướng ứng dụng di động Native (Flutter/React Native) tích hợp dịch vụ ghi vị trí chạy ngầm (Background Location Service).
-2. Tầng Gateway & Automation Orchestrator: Đường hầm bảo mật Cloudflare Tunnel (cloudflared) dẫn truyền không mở cổng Public Inbound vào máy chủ VPS Hetzner CX23 Docker Engine (chạy container n8n_core port 5678 và python_microservice port 8000 xử lý toán học B-Spline), kết nối với Dify Cloud SaaS chạy lõi Google Vertex AI Gemini 1.5 Flash.
-3. Tầng Persistence & Alerts: Cơ sở dữ liệu Supabase PostgreSQL (lưu trữ bảng user_feedbacks), kho lưu trữ đối tượng Cloudflare R2 Bucket (agent-image-storage), và Telegram Admin Bot thông báo sự cố P0/P1.
+Tiêu chí So sánh	Google Maps Thông thường	Hệ thống VibePath
+Mục đích Cốt lõi	Điều hướng giao thông 2D/3D tĩnh cho người đi đường, chỉ đường ngắn nhất.	Tự động hóa sản xuất Video Bản đồ 3D 60FPS & AI Script/Phụ đề cho Content Creators.
+Góc nhìn & Chuyển động Camera	Góc nhìn top-down hoặc isometric cố định, xoay bản đồ thụ động theo hướng di chuyển.	Kịch bản Hạ cánh Điện ảnh 4 Giai đoạn (4-Stage Flythrough) mượt mà từ quỹ đạo vũ trụ đến mặt đường 3D.
+Tái tạo Đường đi (Route Processing)	Vẽ đường đi theo đoạn rẽ giao thông cứng (Polyline gấp khúc).	Làm mượt tọa độ GPS thô bằng thuật toán Toán học B-Spline, tạo đường Coaxial Laser #00E5FF mềm mại.
+Ghi hình & Xuất File	Không hỗ trợ xuất video. Người dùng phải quay màn hình thủ công (dễ gián đoạn và lộ UI).	Xuất Video WebGL 60FPS trực tiếp qua Canvas Stream 1-Click, không gãy khung hình.
+Ranh giới Hành chính (Boundaries)	Hiển thị ranh giới dạng đường mảnh mờ, không tùy biến được hiệu ứng thị giác.	Thắp sáng ranh giới Polygon uốn lượn thực tế toàn cầu bằng viền Laser Cyan nét lẹm và phủ mờ diện tích.
+Đồng bộ Phần mềm Dựng phim (NLE)	Không hỗ trợ.	Xuất trọn bộ NLE Asset Pack: File mốc thời gian .XML (Premiere/CapCut), phụ đề .SRT song ngữ, YouTube Chapters.
+Cá nhân hóa Thương hiệu (Branding)	Giao diện cố định theo chuẩn Google.	Tự do cấu hình màu sắc Accent, Font chữ và áp trực tiếp vào đường line 3D lẫn phụ đề video xuất ra.
 
-2. Cập nhật và Xử lý Điểm nghẽn tại Tầng Automation (n8n & Dify Engine)
+2. Báo cáo Chi tiết Các "Nút Thắt" Kỹ thuật Đã Được Gỡ Bỏ
 
-Giai đoạn đầu của dự án gặp một số điểm nghẽn về xử lý bất đồng bộ, lỗi định dạng dữ liệu và độ trễ. Đội ngũ đã thực hiện hàng loạt nâng cấp quy trình trên n8n và Dify:
+Quá trình phát triển VibePath ghi nhận nhiều rào cản kỹ thuật phức tạp liên ngành giữa Đồ họa 3D WebGL, Hệ thông tin Địa lý (GIS), Xử lý luồng Video và Kiến trúc Proxy. Hệ thống đã gỡ bỏ triệt để 6 nút thắt cốt lõi:
 
-Tách biệt 2 Luồng Workflow Độc lập
+2.1. Nút thắt 1: Sự Phân mảnh giữa MAPBOX DEM 3D và VOLUMETRIC CAD 3D
 
-* Luồng Render Video & AI Content (WF_01_RENDER_PIPELINE):
-  * Endpoint: POST /webhook/vibepath/render (UUID cố định: vibe-render-wf-001).
-  * Cấu trúc rẽ nhánh song song: Nhánh 1 nội suy đường đi GPS mượt 30/60 FPS bằng thuật toán B-Spline toán học trên Python Microservice; Nhánh 2 gửi danh sách quán ăn sang Dify AI Agent. Hai nhánh được hội tụ qua node Merge trước khi gửi job sang Render Server.
-* Luồng Phản hồi & Báo lỗi (WF_02_FEEDBACK_PIPELINE):
-  * Endpoint: POST /webhook/vibepath/feedback (UUID cố định: vibe-feedback-wf-002).
-  * Cơ chế Respond: Immediately (trả về HTTP 200 OK ngay lập tức) giúp giải phóng giao diện người dùng.
-  * Cấu trúc rẽ nhánh song song: Nhánh 1 đẩy ảnh chụp màn hình lên Cloudflare R2 (VibePath/screenshots/); Nhánh 2 gọi Dify AI phân loại bug (UI Error, Logic Bug, Feature Request, User Praise) và đánh giá độ nghiêm trọng (P0, P1, P2). Dữ liệu sau đó được lưu vào Supabase và phát cảnh báo Telegram Alert.
+* Thách thức: Ban đầu, chế độ bản đồ địa hình tự nhiên (MAPBOX DEM 3D) và chế độ bản vẽ kỹ thuật (VOLUMETRIC CAD 3D) hoạt động như hai "vũ trụ" riêng biệt. Mỗi lần chuyển đổi chế độ, ứng dụng hủy và khởi tạo lại toàn bộ Mapbox Instance, gây ra hiện tượng chớp đen Canvas WebGL, gián đoạn tọa độ Camera và đứt gãy thông số khí quyển.
+* Giải pháp Khắc phục: Xây dựng Trình điều khiển chuyển ngữ cảnh mượt (MapModeController). Hệ thống duy trì duy nhất một Canvas WebGL và thực hiện nội suy (Cross-fade) các thuộc tính đồ họa trong khoảng 600–800ms:
+  * Khí quyển & Bầu trời (setFog): Điều chỉnh màu sắc hào quang Cyan #00E5FF và mật độ sao.
+  * Độ cao địa hình (setTerrain): Điều chỉnh hệ số phóng đại địa hình từ 1.6x (DEM) về 1.0x (CAD phẳng).
+  * Tòa nhà 3D (fill-extrusion): Chuyển đổi màu sắc và độ trong suốt của khối kiến trúc.
+  * Lưới sàn CAD (cad-floor-grid): Bật/tắt lớp lưới tọa độ mặt sàn #1F1F2E.
 
-Xử lý Bẫy Dữ liệu và Ép kiểu Khắt khe (Strict Data Contracts)
+2.2. Nút thắt 2: Video bị Ngắt Sau 3 Giây & Frame Đen WebGL
 
-* Triệt tiêu bẫy Markdown Wrapper: Thêm đoạn mã Regex sanitizer rawData.replace(/```json/gi, '').replace(/```/g, '').trim() trong các node Code n8n (Parse Dify JSON) để loại bỏ hoàn toàn các ký tự ```json do LLM tự động thêm vào, ngăn ngừa crash hàm JSON.parse.
-* Đồng bộ Ép kiểu Dữ liệu:
-  * Tọa độ GPS latitude và longitude bắt buộc kiểu Float (Number) để tránh làm gãy thuật toán ma trận B-Spline.
-  * Đánh giá rating bắt buộc kiểu Integer (1 đến 5) để không gây lỗi invalid input syntax for integer trên cột INT2 của PostgreSQL/Supabase.
-  * Ngôn ngữ language bắt buộc kiểu Enum chuỗi viết thường ("vi" hoặc "en").
-  * Vai trò role bắt buộc kiểu Enum chuỗi viết thường ("vlogger", "editor", "tester").
-* Cấu hình Vertex AI JSON Output: Bật cờ response_mime_type: "application/json" trong cài đặt model của Dify để đảm bảo Gemini xuất dữ liệu cấu trúc thuần.
-* Tích hợp Cloudflare R2 chuẩn S3: Cấu hình Custom Endpoint https://<account_id>.r2.cloudflarestorage.com, Region auto, Bucket agent-image-storage với tiền tố Object Key VibePath/.
+* Thách thức: Khi người dùng xuất video, trình ghi hình (MediaRecorder) chỉ thu được khoảng 3 giây rồi ngắt hoặc xuất ra các khung hình đen. Nguyên nhân do WebGL mặc định xả bộ nhớ đệm đồ họa (preserveDrawingBuffer = false) ngay sau khi vẽ từng frame để tiết kiệm RAM, kết hợp với việc hàm bay Camera chạy theo thời gian thực khiến các ô bản đồ (Tiles) chưa kịp nạp.
+* Giải pháp Khắc phục:
+  1. Kích hoạt thuộc tính preserveDrawingBuffer: true khi khởi tạo mapboxgl.Map, giữ nguyên bộ đệm đồ họa phục vụ việc chụp khung hình.
+  2. Thiết lập Kịch bản Bay 4 Giai đoạn Tuần tự (Sequential Async Chain):
+    * Stage 1 (Deep Orbit Space View): Nhìn từ ngoài không gian (zoom: 1.8, pitch: 0°), kích hoạt hiệu ứng sương mờ khí quyển Cyan.
+    * Stage 2 (Regional Descent): Hạ cao độ tiếp cận vùng/thành phố (zoom: 9.5, pitch: 30°).
+    * Stage 3 (District Scanner Focus): Tập trung vào khu vực hành chính (zoom: 13.8, pitch: 45°), tự động kích hoạt đường quét ranh giới Polygon.
+    * Stage 4 (Urban 3D Street Low-Flyover): Hạ thấp góc nhìn 3D (zoom: 17.8, pitch: 72°, bearing: 40°), bay lướt qua các khối tòa nhà 3D đâm thẳng tới điểm ghim [ POI ].
+  3. Đồng bộ Trình ghi Canvas Stream (map.getCanvas().captureStream(60)), tự động kích hoạt startRecording() tại Stage 1 và chỉ gọi stopRecording() sau khi Stage 4 hoàn tất khóa mục tiêu 1.5 giây.
 
-3. Nâng cấp Giao diện và Trải nghiệm Người dùng (Frontend UI/UX)
+2.3. Nút thắt 3: Lấy Sai Tọa độ Google Maps URL & Rào cản Billing
 
-Trải nghiệm người dùng trên bản Web Demo (vibepath.mizu2711.workers.dev) đã được tinh chỉnh khắt khe dựa trên các báo cáo kiểm thử thực tế.
+* Thách thức: Việc bắt người dùng dán link Google Maps gặp hai sự cố lớn: chuỗi URL chứa chuỗi @10.7629,106.7009 thực chất là tâm màn hình Camera chứ không phải tọa độ quán ăn, còn link rút gọn maps.app.goo.gl bị chặn CORS. Ngoài ra, việc tích hợp Google Places API dính rào cản hạn chế thanh toán Google Cloud tại thị trường Việt Nam.
+* Giải pháp Khắc phục:
+  1. Phát triển Bộ bóc tách Tọa độ Thông minh (SmartLocationResolver) ưu tiên trích xuất chính xác tham số mã hóa điểm ghim thực tế !3d (Latitude) và !4d (Longitude) nằm ẩn trong URL.
+  2. Loại bỏ hoàn toàn sự phụ thuộc vào Google Places API. Chuyển sang mô hình Backend Proxy (Cloudflare Worker) tích hợp Mapbox Search Box API v6 kết hợp dữ liệu Goong API cho thị trường nội địa.
+  3. Mở khóa ô tìm kiếm tự do toàn cầu (PoiSearchBox.tsx), cho phép gõ bất kỳ tên quán ăn, hẻm nhỏ hay nhà hàng quốc tế nào mà không yêu cầu người dùng phải tự đăng ký hay nhập API Key cá nhân.
 
-Bố cục 3 Tab Trải nghiệm Độc lập
+2.4. Nút thắt 4: Ranh giới Hành chính Hình hộp Chữ nhật Thô cứng
 
-1. Tab 1: Vlogger Simulator:
-  * Cho phép chọn các chuyến đi mẫu (Foodtour Cần Thơ, Saigon Expedition).
-  * Ghim nhanh các quán ăn dừng chân kèm đánh giá và hình ảnh.
-  * Segmented switch chọn ngôn ngữ đầu ra (VN | EN).
-  * Nút kích hoạt đồng bộ dữ liệu Sync to Cloud.
-2. Tab 2: Editor Studio:
-  * Trình phát Video Bản đồ 3D MP4 60FPS rendered trực quan.
-  * Tải 1-Click trọn bộ tài nguyên biên tập: Phụ đề song ngữ .SRT, Marker Timeline .XML cắm thẳng vào Premiere Pro / CapCut, YouTube Chapters và TikTok Captions.
-3. Tab 3: Feedback & Bug Report:
-  * Form khảo sát UX tối giản (hoàn thành dưới 30 giây): Chọn vai trò, 5-Star Rating, Checkbox tính năng ấn tượng, Textarea nội dung góp ý và đính kèm ảnh lỗi.
+* Thách thức: Ở phiên bản ban đầu, khu vực quận/huyện được khoanh vùng bằng một khung hình hộp chữ nhật (Bounding Box) thô sơ, làm mất đi tính thẩm mỹ và độ chính xác địa lý.
+* Giải pháp Khắc phục: Tích hợp Mapbox Global Boundaries Vector Tileset (mapbox.boundaries-adm2-v4). Khi camera hạ cánh xuống Stage 3, hệ thống tự động thực hiện thuật toán tra cứu tọa độ điểm trong đa giác (Point-in-Polygon Query), trích xuất mã mapbox_id và thắp sáng đúng đường ranh giới uốn lượn thực tế của quận/thành phố trên toàn thế giới với đường viền Laser Cyan #00E5FF đứt nét kỹ thuật CAD và lớp phủ mờ fill-opacity: 0.12.
 
-Sửa đổi Tối ưu Trải nghiệm và Chống Lỗi Giao diện
+2.5. Nút thắt 5: Lỗi Vỡ Khung Canvas WebGL khi Deploy Cloudflare Workers
 
-* Ngăn chặn bấm lặp (Double-Submission Prevention): Thêm biến trạng thái isSubmitting và thuộc tính disabled={isSubmitting} đi kèm icon Spinner xoay cho nút Sync to Cloud và Gửi Phản hồi.
-* Cố định Thanh Header: Thiết lập class sticky top-0 z-50 cho HeaderHUD.tsx giúp công tắc đổi ngôn ngữ VN | EN luôn nổi trên cùng khi cuộn trang.
-* Xử lý Tràn chữ (Layout Overflow): Thêm class truncate và overflow-hidden cho khung hiển thị tên quán ăn quá dài trên Mobile View Frame.
+* Thách thức: Sau khi đóng gói và triển khai ứng dụng lên Cloudflare Workers, khung cầu bản đồ 3D bị co cụm về một góc màn hình thay vì tràn toàn bộ Canvas. Nguyên nhân do tiến trình render JavaScript trên Cloudflare thực thi trước khi CSS Layout hoàn tất tính toán chiều cao container.
+* Giải pháp Khắc phục:
+  1. Bổ sung lệnh ép cập nhật kích thước map.resize() bên trong sự kiện load của Mapbox.
+  2. Tích hợp ResizeObserver liên tục lắng nghe thay đổi kích thước của div container mẹ.
+  3. Khóa bố cục khung chứa bằng lớp vị trí tuyệt đối absolute inset-0 w-full h-full kết hợp relative w-full h-screen overflow-hidden ở khung ngoài.
 
-4. Tái Cấu trúc Mô-đun Lego và Thiết lập Protocol Bàn giao AI (AGENT.md)
+2.6. Nút thắt 6: Giao diện Rác Text Debug & Thiếu Định hình Branding
 
-Để chuyển đổi dự án từ một sản phẩm đơn lẻ thành một bộ khung kỹ thuật tái sử dụng 80-90% cho các dự án AI Automation tương lai, VibePath đã được tái cấu trúc thành Mô hình Lego (Modular IaC).
+* Thách thức: Màn hình 3D bị che phủ bởi quá nhiều chuỗi văn bản debug trùng lặp (như [ 3D LOCK ], [ GLOBAL_DISTRICT_SCAN ] lặp lại 3 lần), màu sắc sử dụng tông cam vàng đại trà và bo góc mềm mại không phù hợp với giới đồ họa chuyển động chuyên nghiệp.
+* Giải pháp Khắc phục:
+  1. Loại bỏ toàn bộ text rác debug, gom toàn bộ chỉ số vào 1 Badge Trạng thái Tinh gọn: [ 🟢 GPS_LOCKED • ±1.2m ] | [ Bến Thành, VN ] | [ 4K 60FPS ].
+  2. Chuẩn hóa phong cách Cybernetic Swiss Brutalism: Ép quy tắc border-radius: 0px !important trên 100% phần tử, góc cắt cơ khí 45 độ (clip-path), kết hợp bảng màu Digital High-End: Nền Void Obsidian #05050A, Cyan Kỹ thuật #00E5FF, Tím Quantum #5322FF, Xanh Vệ tinh #00FF66.
+  3. Đấu nối ThemeContext cho phép người dùng tùy chỉnh màu sắc/font chữ, tự động tiêm biến CSS (--brand-cyan, --brand-violet) ở giao diện và đóng gói node branding vào JSON Payload gửi sang Webhook n8n để Server Render vẽ video đúng màu nhận diện thương hiệu.
 
-Tách biệt 2 Kho Lưu trữ Git (Repositories)
+3. Kiến trúc Hệ thống 3 Tầng & Luồng Tự động hóa
 
-* Repo Frontend Client (vibepath-web-client): Chứa mã nguồn React 18, Tailwind CSS, Lucide Icons và Cloudflare Worker Client (src/App.tsx, src/components/, src/i18n/, src/services/).
-* Repo Backend & Automation Core (vibepath-automation-core): Chứa hạ tầng Docker, n8n workflows, Dify DSL, Python Service, Supabase Migrations, Data Contracts và CI/CD.
+Hệ thống VibePath được tổ chức thành kiến trúc 3 tầng phân tách rõ ràng giữa xử lý giao diện WebGL thời gian thực và mạng lưới microservices xử lý dữ liệu nặng ở Backend:
 
-Tệp Protocol Điều hành System AGENT.md
++-----------------------------------------------------------------------------------+
+| CLIENT LAYER (Cloudflare Workers / Web Browser)                                  |
+| - React 18 + Mapbox GL JS v3 WebGL 3D Globe                                       |
+| - Smooth Mode Controller + 4-Stage Flight Engine                                  |
+| - MediaRecorder Canvas 60FPS Exporter                                             |
+| - Cybernetic Swiss Brutalism UI & ThemeContext                                    |
++-----------------------------------------------------------------------------------+
+                                       │
+                                       ▼ (JSON Payload via HTTPS Webhook)
++-----------------------------------------------------------------------------------+
+| BACKEND ORCHESTRATION LAYER (Hetzner VPS / Docker Container Cluster)              |
+| - Cloudflare Zero-Trust Tunnel Gateway                                            |
+| - n8n Workflow Automation Engine (Luồng điều phối chính)                          |
+| - Python Microservice: B-Spline GPS Route Smoothing & Geometric Interpolation     |
+| - Dify AI Agent (Vertex AI Gemini 1.5 Flash): Sinh Kịch bản & Phụ đề Song ngữ    |
++-----------------------------------------------------------------------------------+
+                                       │
+                                       ▼ (Structured Assets & GIS Data)
++-----------------------------------------------------------------------------------+
+| STORAGE & DELIVERY LAYER                                                          |
+| - Supabase PostgreSQL (Lưu trữ Metadata, Trip Logs, POI Coordinates)              |
+| - Cloudflare R2 Object Storage (Lưu trữ Video MP4 3D, ZIP Assets)                 |
+| - NLE Asset Studio Dock (Đồng bộ XML Premiere/CapCut, SRT, YouTube Chapters)      |
++-----------------------------------------------------------------------------------+
 
-Tệp AGENT.md đã được khởi tạo và lưu trực tiếp tại thư mục gốc của Repo Backend để điều hành các AI Agent (Jules, Cursor, Claude Code, Devin) với 4 Quy tắc Bất biến:
 
-1. Quy tắc Tối cao Data Contract (Rule of Contract Supremacy): Ép kiểu Float cho GPS, Integer 1-5 cho Rating, Enum "vi"|"en" cho Language.
-2. Quy tắc Cập nhật Workflow Bất biến (Rule of Deterministic Workflow Deployment): Sử dụng UUID cố định (vibe-render-wf-001 và vibe-feedback-wf-002) để cập nhật tại chỗ via REST API PUT /api/v1/workflows/{id}, giữ nguyên Webhook slug URL tĩnh (vibepath/render và vibepath/feedback).
-3. Quy tắc Xử lý bẫy Markdown (Rule of Markdown Traps in LLMs): Bắt buộc dọn dẹp Regex trước khi parse JSON từ LLM.
-4. Quy tắc Chống gửi trùng & Kháo giao diện (Rule of Double-Submission Prevention): Khóa nút và hiển thị Spinner loading khi thực hiện các tác vụ bất đồng bộ.
+4. Luồng Trải nghiệm Người dùng & Bộ Tài nguyên Xuất bản NLE Asset Pack
 
-Ma trận Mô-đun Lego
+VibePath tối ưu hóa quy trình làm việc giữa hai vai trò chính trong một đội ngũ sản xuất nội dung:
 
-* Khối Quy chuẩn (Schemas & Contracts): architecture/data-contracts.json (JSON Schema Draft-07), architecture/openapi.yaml (OpenAPI 3.1), architecture/architecture-map.md (Bản đồ Causal Lineage & Ma trận rẽ nhánh ngầm), DDL SQL Migration 20261026_init_user_feedbacks.sql.
-* Khối Dựng sẵn (Templates): Hạ tầng Docker VPS (docker-compose.yml + .env), n8n Canvas Templates (.json), Dify Agent DSL (.yml), CI/CD GitHub Actions (validate-contracts.yml và deploy-automation.yml).
+4.1. Vai trò Vlogger (Field Tracker View)
 
+1. Khởi tạo & Nhập Tìm kiếm: Vlogger gõ tên quán ăn hoặc điểm dừng chân trên thanh tìm kiếm thông minh mà không cần nhập bất kỳ API Key nào.
+2. Ghim POI & Chọn Ngôn ngữ: Hệ thống định vị chính xác tọa độ GPS, thả ghim HUD [ 01 // POI ] và cho phép chọn ngôn ngữ xuất bản (Việt/Anh).
+3. 1-Click Sync to Cloud: Bấm nút đồng bộ, hệ thống hiển thị thanh tiến trình 3 bước (Stepper Progress): Làm mượt đường đi GPS \rightarrow AI Dify soạn kịch bản song ngữ \rightarrow Đóng gói Video 3D và NLE Assets.
+
+4.2. Vai trò Editor (Editor Studio View)
+
+Editor mở tab Editor Studio để nhận trọn bộ tài nguyên xuất bản chuyên nghiệp (NLE Asset Delivery Pack) đã được phân cấp thị giác theo mạng lưới Bento CAD 2 khu vực:
+
+* Video Bản đồ 3D MP4 60FPS: Clips quay hạ cánh điện ảnh 4 giai đoạn chất lượng 4K/60FPS, đường bay vẽ chuẩn màu thương hiệu Vlogger.
+* File Mốc Thời gian .XML (XMEML): Import trực tiếp vào Adobe Premiere Pro, DaVinci Resolve hoặc CapCut để tự động chèn marker vị trí POI lên đường dựng timeline.
+* Phụ đề Song ngữ .SRT: Phụ đề khớp chính xác mốc thời gian di chuyển (\pm 0.02s), hỗ trợ dịch thuật tự nhiên Việt - Anh.
+* Nội dung Quảng bá AI (YouTube / TikTok): Tự động phân đoạn YouTube Chapters, danh sách mốc thời gian và thẻ Hashtags tối ưu cho thuật toán mạng xã hội.
+
+5. Đánh giá Tổng kết & Định hướng Phát triển Strategical
+
+Thông qua việc tháo gỡ thành công hàng loạt nút thắt kỹ thuật từ đồ họa 3D WebGL, xử lý hình học GIS, tối ưu hóa giao diện người dùng cho đến việc che giấu phức tạp API Key ở trạm proxy Backend, VibePath đã chính thức chuyển hóa các bài toán khó thành "Rào cản Phòng thủ" (Competitive Moat) vững chắc.
+
+Sự kết hợp giữa công nghệ bản đồ không gian 3D trực quan và khả năng tự động hóa quy trình dựng phim giúp VibePath đứng ở một vị thế hoàn toàn độc lập so với các ứng dụng bản đồ chỉ đường thông thường, mở ra chuẩn mực mới cho việc sản xuất nội dung du lịch và ẩm thực số.
