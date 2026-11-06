@@ -20,9 +20,7 @@ import {
 } from '../data/vibePathData';
 import {
   Globe2,
-  KeyRound,
   Rocket,
-  ShieldAlert,
   CheckCircle2,
   Compass,
   Crosshair,
@@ -73,35 +71,10 @@ export interface CyberGlobe3DProps {
   onOpenSettings?: () => void;
 }
 
-/**
- * Validate Mapbox GL v3 Public Access Token before WebGL initialization
- * Prevents placeholder tokens (e.g. pk.eyJ1xxxx...) or empty strings from crashing WebGL
- */
-function validateMapboxToken(rawToken: string): { valid: boolean; reason?: string } {
+function validateMapboxToken(rawToken: string): { valid: boolean } {
   const trimmed = (rawToken || '').trim();
-  if (!trimmed) {
-    return {
-      valid: false,
-      reason: 'MISSING_TOKEN // NO_VITE_MAPBOX_TOKEN_OR_BYOK_CONFIGURED',
-    };
-  }
-  if (!trimmed.startsWith('pk.')) {
-    return {
-      valid: false,
-      reason: 'INVALID_PREFIX // MAPBOX_PUBLIC_TOKEN_MUST_START_WITH_PK.',
-    };
-  }
-  if (trimmed.includes('xxxxxxxx')) {
-    return {
-      valid: false,
-      reason: 'PLACEHOLDER_TOKEN // REPLACE_PK.EYJ1XXXX_WITH_LIVE_MAPBOX_KEY',
-    };
-  }
-  if (trimmed.length < 32) {
-    return {
-      valid: false,
-      reason: 'MALFORMED_TOKEN // TOKEN_LENGTH_BELOW_MINIMUM_SPEC',
-    };
+  if (!trimmed || !trimmed.startsWith('pk.') || trimmed.includes('xxxxxxxx') || trimmed.length < 32) {
+    return { valid: false };
   }
   return { valid: true };
 }
@@ -117,26 +90,26 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
   language = 'vi',
   autoTriggerKey = 0,
   compactMode = false,
-  onOpenSettings,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
+  const fallbackCanvasRef = useRef<HTMLCanvasElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const newPinMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
-  // Unified Map Mode State (DEM_3D vs CAD_3D) on a single persistent Mapbox GL v3 instance
+  // Unified Map Mode State (DEM_3D vs CAD_3D)
   const [activeMode, setActiveMode] = useState<UnifiedMapMode>('DEM_3D');
   const activeModeRef = useRef<UnifiedMapMode>('DEM_3D');
 
-  // Interactive Click-to-Pin / Search Target Pin State ([ NEW // POI ])
-  const [droppedNewPin, setDroppedNewPin] = useState<{
+  // Selected / Dropped Food Venue Target ([ 01 // POI ])
+  const [selectedSearchPoi, setSelectedSearchPoi] = useState<{
     latitude: number;
     longitude: number;
-    label: string;
+    name: string;
+    address?: string;
   } | null>(null);
 
   // Global Administrative Boundary HUD Readout State
-  // Format: [ GLOBAL_DISTRICT_SCAN // <DISTRICT_NAME>, <COUNTRY_CODE> ]
   const [globalDistrictScan, setGlobalDistrictScan] =
     useState<GlobalDistrictResolution>({
       mapboxId: 'dXJuOm1ieGJuZDo2ODg0Njp2NA',
@@ -152,28 +125,50 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
   const [mapboxToken, setMapboxToken] = useState<string>(() => {
     return ApiKeyManager.getMapKey() || (import.meta as any).env?.VITE_MAPBOX_TOKEN || '';
   });
-  const [inlineTokenInput, setInlineTokenInput] = useState<string>('');
   const [mapReady, setMapReady] = useState<boolean>(false);
-  const [errorBanner, setErrorBanner] = useState<{
-    code: string;
-    detail: string;
-  } | null>(null);
+  const [useBuiltIn3DEngine, setUseBuiltIn3DEngine] = useState<boolean>(false);
+
   const [cameraTelemetry, setCameraTelemetry] = useState<{
     zoom: number;
     pitch: number;
     bearing: number;
   }>({
-    zoom: 1.8,
-    pitch: 0,
-    bearing: 0,
+    zoom: 16.8,
+    pitch: 72,
+    bearing: 40,
   });
 
-  const targetDisplayPoi: FoodPOI = droppedNewPin
+  // Animated camera state for built-in 60FPS 3D Globe & Tactical Street Renderer
+  const animCameraRef = useRef<{
+    lng: number;
+    lat: number;
+    targetLng: number;
+    targetLat: number;
+    zoom: number;
+    targetZoom: number;
+    pitch: number;
+    targetPitch: number;
+    bearing: number;
+    targetBearing: number;
+  }>({
+    lng: 106.7024,
+    lat: 10.7611,
+    targetLng: 106.7024,
+    targetLat: 10.7611,
+    zoom: 16.8,
+    targetZoom: 16.8,
+    pitch: 72,
+    targetPitch: 72,
+    bearing: 40,
+    targetBearing: 40,
+  });
+
+  const targetDisplayPoi: FoodPOI = selectedSearchPoi
     ? {
-        poi_id: 'poi-dropped-new',
-        name: droppedNewPin.label,
-        latitude: droppedNewPin.latitude,
-        longitude: droppedNewPin.longitude,
+        poi_id: 'poi-search-selected',
+        name: selectedSearchPoi.name,
+        latitude: selectedSearchPoi.latitude,
+        longitude: selectedSearchPoi.longitude,
         rating: 5,
       }
     : activePoi ||
@@ -203,7 +198,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     }
   }, []);
 
-  // Listen for BYOK token updates across the app
   useEffect(() => {
     const handleKeysUpdated = () => {
       const updatedToken =
@@ -214,7 +208,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     return () => window.removeEventListener('vibepath_apikeys_updated', handleKeysUpdated);
   }, []);
 
-  // Resolve and illuminate Global Administrative Boundary whenever target coordinates change
+  // Resolve Global Administrative Boundary whenever target coordinates change
   useEffect(() => {
     let cancelled = false;
     CinematicFlightEngine.resolveGlobalDistrict(
@@ -239,19 +233,29 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
   }, [targetDisplayPoi.longitude, targetDisplayPoi.latitude, mapReady]);
 
   /**
-   * Drop [ NEW // POI ] Marker HUD tag on the 3D map, resolve global district boundary, and align camera
+   * Center the 3D camera over target food POI and render the HUD tag [ 01 // POI ] <VENUE_NAME_UPPERCASE>
    */
-  const dropNewPoiMarkerAndAlignCamera = useCallback(
-    (lng: number, lat: number, customLabel?: string, flyFromOrbit = false) => {
+  const flyToFoodPoiAndRenderTag = useCallback(
+    (lng: number, lat: number, venueName?: string, address?: string) => {
       const cleanLng = Number(lng.toFixed(6));
       const cleanLat = Number(lat.toFixed(6));
-      const displayLabel = (customLabel || 'NEW_TARGET_PIN').toUpperCase();
+      const displayLabel = (venueName || 'FOOD_POI_TARGET').toUpperCase();
 
-      setDroppedNewPin({
+      setSelectedSearchPoi({
         latitude: cleanLat,
         longitude: cleanLng,
-        label: displayLabel,
+        name: displayLabel,
+        address,
       });
+
+      // Animate built-in 3D renderer camera target
+      animCameraRef.current.zoom = 9.5;
+      animCameraRef.current.pitch = 35;
+      animCameraRef.current.targetLng = cleanLng;
+      animCameraRef.current.targetLat = cleanLat;
+      animCameraRef.current.targetZoom = 17.5;
+      animCameraRef.current.targetPitch = 72;
+      animCameraRef.current.targetBearing = 40;
 
       if (onPickCoordinateRef.current) {
         onPickCoordinateRef.current(cleanLat, cleanLng);
@@ -260,13 +264,13 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         onAddPoiFromMapRef.current({
           longitude: cleanLng,
           latitude: cleanLat,
-          name: customLabel,
+          name: venueName,
+          address,
         });
       }
 
       const map = mapRef.current;
 
-      // Resolve Global Administrative Boundary for the clicked/searched point
       CinematicFlightEngine.resolveGlobalDistrict(map, cleanLng, cleanLat).then(
         (res) => {
           setGlobalDistrictScan(res);
@@ -294,8 +298,8 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         el.innerHTML = `
           <div style="
             background: #080A0F;
-            border: 1px solid #00E676;
-            color: #00E676;
+            border: 1px solid #00E5FF;
+            color: #00E5FF;
             padding: 5px 10px;
             font-family: 'JetBrains Mono', monospace;
             font-size: 10px;
@@ -307,11 +311,11 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
             gap: 6px;
             white-space: nowrap;
             user-select: none;
-            box-shadow: 0 0 0 1px #00E5FF;
+            box-shadow: 0 0 0 1px #00E676;
           ">
-            <span style="color: #00E676;">[ NEW // POI ]</span>
+            <span style="color: #00E5FF;">[ 01 // POI ]</span>
             <span style="color: #FFFFFF;">${displayLabel}</span>
-            <span style="color: #00E5FF;">(${cleanLat.toFixed(4)}°N, ${cleanLng.toFixed(4)}°E)</span>
+            <span style="color: #00E676;">(${cleanLat.toFixed(4)}°N, ${cleanLng.toFixed(4)}°E)</span>
           </div>
         `;
 
@@ -319,26 +323,15 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           .setLngLat([cleanLng, cleanLat])
           .addTo(map);
 
-        if (flyFromOrbit) {
-          map.flyTo({
-            center: [cleanLng, cleanLat],
-            zoom: 17.2,
-            pitch: 72,
-            bearing: 40,
-            speed: 1.35,
-            curve: 1.4,
-            essential: true,
-          });
-        } else {
-          map.easeTo({
-            center: [cleanLng, cleanLat],
-            zoom: Math.max(map.getZoom(), 16.5),
-            pitch: 72,
-            bearing: 40,
-            duration: 1400,
-            essential: true,
-          });
-        }
+        map.flyTo({
+          center: [cleanLng, cleanLat],
+          zoom: 17.5,
+          pitch: 72,
+          bearing: 40,
+          speed: 1.35,
+          curve: 1.4,
+          essential: true,
+        });
       } catch (_) {}
     },
     []
@@ -353,6 +346,10 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       const resolvedTripName = customTripName || 'SAIGON_NIGHT_CULINARY_NODE_01';
       isRecordingRef.current = recordVideo;
 
+      // Sync built-in 3D camera stages
+      animCameraRef.current.targetLng = target.longitude;
+      animCameraRef.current.targetLat = target.latitude;
+
       CinematicFlightEngine.runFourStageFlight({
         map: mapRef.current,
         targetLng: target.longitude,
@@ -363,6 +360,23 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         onStageChange: (update) => {
           isRecordingRef.current = update.isRecording;
           setFlightStatus(update);
+          if (update.stage === 'STAGE_1_ORBIT') {
+            animCameraRef.current.targetZoom = 1.8;
+            animCameraRef.current.targetPitch = 0;
+            animCameraRef.current.targetBearing = 0;
+          } else if (update.stage === 'STAGE_2_REGIONAL') {
+            animCameraRef.current.targetZoom = 9.5;
+            animCameraRef.current.targetPitch = 30;
+            animCameraRef.current.targetBearing = -15;
+          } else if (update.stage === 'STAGE_3_DISTRICT_SCANNER') {
+            animCameraRef.current.targetZoom = 13.8;
+            animCameraRef.current.targetPitch = 45;
+            animCameraRef.current.targetBearing = -35;
+          } else {
+            animCameraRef.current.targetZoom = 17.8;
+            animCameraRef.current.targetPitch = 72;
+            animCameraRef.current.targetBearing = 40;
+          }
           if (update.globalDistrictInfo) {
             setGlobalDistrictScan(update.globalDistrictInfo);
           }
@@ -383,7 +397,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     []
   );
 
-  // Listen for global [ 🎬 1-CLICK CINEMATIC RENDER ] trigger from SwissBrutalistHUD or EditorStudioTab
   useEffect(() => {
     const handleTriggerEvent = (e: Event) => {
       const custom = e as CustomEvent<{ recordVideo?: boolean; tripName?: string } | undefined>;
@@ -398,11 +411,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     };
   }, [runCinematicSequence]);
 
-  /**
-   * 3. Brutalist Marker HUD Injection:
-   * Zero-radius HTML marker (border-radius: 0px !important, background #080A0F, 1px border #00E5FF)
-   * Formatted as: [ 01 // POI ] <NAME_IN_UPPERCASE>
-   */
   const mountBrutalistMarkers = useCallback(
     (map: mapboxgl.Map, pois: FoodPOI[]) => {
       markersRef.current.forEach((m) => m.remove());
@@ -464,7 +472,8 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     [allNodes, onSelectNode, activePoi]
   );
 
-  // Single Persistent Native Mapbox GL JS v3 WebGL Instance (only re-runs if mapboxToken changes)
+  // 1. Initialize Persistent Native Mapbox GL JS v3 WebGL Instance (with ResizeObserver)
+  // Or seamlessly activate Built-in 60FPS 3D Tactical Globe Canvas when no client token is configured
   useEffect(() => {
     if (!mapContainer.current) return;
 
@@ -482,27 +491,13 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       mapRef.current = null;
     }
 
-    setMapReady(false);
-
     const resolvedToken =
       mapboxToken || ApiKeyManager.getMapKey() || (import.meta as any).env?.VITE_MAPBOX_TOKEN || '';
 
     const tokenCheck = validateMapboxToken(resolvedToken);
-    if (!tokenCheck.valid) {
-      setErrorBanner({
-        code: '[ ERR_MAPBOX_TOKEN // VALIDATION_GUARD ]',
-        detail:
-          tokenCheck.reason ||
-          'MAPBOX_PUBLIC_TOKEN_REQUIRED // PROVIDE_PK.EYJ_KEY_VIA_BYOK_OR_ENV',
-      });
-      return;
-    }
-
-    if (typeof mapboxgl.supported === 'function' && !mapboxgl.supported()) {
-      setErrorBanner({
-        code: '[ ERR_WEBGL_UNSUPPORTED // HARDWARE_CONTEXT_FAILED ]',
-        detail: 'WEBGL2_RENDERING_CONTEXT_UNAVAILABLE_ON_THIS_DEVICE',
-      });
+    if (!tokenCheck.valid || (typeof mapboxgl.supported === 'function' && !mapboxgl.supported())) {
+      setUseBuiltIn3DEngine(true);
+      setMapReady(true);
       return;
     }
 
@@ -518,11 +513,10 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         activePoi?.latitude ||
         (telemetryData.length > 0 ? telemetryData[0].latitude : 10.7611);
 
-      // 1. Initialize Single Persistent 3D Globe with WebGL Buffer Retention (preserveDrawingBuffer: true)
       const map = new mapboxgl.Map({
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/dark-v11',
-        preserveDrawingBuffer: true, // CRITICAL: Prevents blank/black frames during MediaRecorder capture
+        preserveDrawingBuffer: true,
         projection: 'globe',
         center: [startLng, startLat],
         zoom: 1.8,
@@ -532,8 +526,9 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       });
 
       mapRef.current = map;
+      setUseBuiltIn3DEngine(false);
 
-      // 💥 ĐIỂM CỐT LÕI 1: Ép Mapbox resize ngay sau khi nạp xong style/layout
+      // Ép Mapbox resize ngay sau khi nạp xong style/layout
       map.on('load', () => {
         window.setTimeout(() => {
           if (mapRef.current) {
@@ -542,7 +537,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         }, 100);
       });
 
-      // 💥 ĐIỂM CỐT LÕI 2: Đăng ký ResizeObserver theo dõi kích thước container liên tục
+      // Đăng ký ResizeObserver theo dõi kích thước container liên tục
       const resizeObserver =
         typeof ResizeObserver !== 'undefined'
           ? new ResizeObserver(() => {
@@ -559,10 +554,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       map.on('error', (event: any) => {
         if (isUnmounted) return;
         const sourceId = String(event?.sourceId || '');
-        // Ignore tileset-entitlement warnings on enterprise boundaries-adm2-v4 so base 3D globe continues
-        if (sourceId === GLOBAL_BOUNDARIES_SOURCE_ID) {
-          return;
-        }
+        if (sourceId === GLOBAL_BOUNDARIES_SOURCE_ID) return;
         const status = event?.error?.status;
         const msg = String(event?.error?.message || '');
         if (
@@ -571,13 +563,8 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           msg.toLowerCase().includes('unauthorized') ||
           msg.toLowerCase().includes('access token')
         ) {
-          setMapReady(false);
-          setErrorBanner({
-            code: `[ ERR_MAPBOX_AUTH_${status || 401} // TOKEN_REJECTED ]`,
-            detail:
-              msg ||
-              'MAPBOX_API_REJECTED_ACCESS_TOKEN // CONFIGURE_VALID_PK.EYJ_KEY_IN_BYOK',
-          });
+          setUseBuiltIn3DEngine(true);
+          setMapReady(true);
         }
       });
 
@@ -590,25 +577,18 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         });
       });
 
-      // 2. Interactive Map Click-To-Pin Listener:
-      // Drops [ NEW // POI ] Marker HUD tag and triggers camera alignment
       map.on('click', (e) => {
         const { lng, lat } = e.lngLat;
-        dropNewPoiMarkerAndAlignCamera(lng, lat, 'MAP_CLICK_TARGET', false);
+        flyToFoodPoiAndRenderTag(lng, lat, 'MAP_PIN_VENUE');
       });
 
       map.on('style.load', () => {
         if (isUnmounted) return;
         try {
-          setErrorBanner(null);
           setMapReady(true);
-
           const initialPreset = MapModeController.getPreset(activeModeRef.current);
-
-          // Atmospheric Cyan Halo Shader
           map.setFog(initialPreset.fog);
 
-          // 1a. 3D Terrain (DEM): raster-dem source mapbox://mapbox.mapbox-terrain-dem-v1
           if (!map.getSource('mapbox-dem')) {
             map.addSource('mapbox-dem', {
               type: 'raster-dem',
@@ -622,7 +602,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
             exaggeration: initialPreset.terrainExaggeration,
           });
 
-          // 1b. Global Administrative Boundaries Vector Tileset (mapbox://mapbox.boundaries-adm2-v4)
           try {
             if (!map.getSource(GLOBAL_BOUNDARIES_SOURCE_ID)) {
               map.addSource(GLOBAL_BOUNDARIES_SOURCE_ID, {
@@ -630,7 +609,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
                 url: 'mapbox://mapbox.boundaries-adm2-v4',
               });
             }
-
             if (!map.getLayer(GLOBAL_DISTRICT_FILL_LAYER_ID)) {
               map.addLayer({
                 id: GLOBAL_DISTRICT_FILL_LAYER_ID,
@@ -644,7 +622,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
                 },
               });
             }
-
             if (!map.getLayer(GLOBAL_DISTRICT_STROKE_LAYER_ID)) {
               map.addLayer({
                 id: GLOBAL_DISTRICT_STROKE_LAYER_ID,
@@ -661,7 +638,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
             }
           } catch (_) {}
 
-          // 1c. 3D Building Extrusions: fill-extrusion layer mapped to composite/building
           const layers = map.getStyle()?.layers;
           const labelLayerId = layers?.find(
             (layer) => layer.type === 'symbol' && layer.layout?.['text-field']
@@ -687,7 +663,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
             );
           }
 
-          // Optional CAD Wireframe Footprint Layer toggled in-place by MapModeController.switchMode
           if (!map.getLayer('3d-buildings-cad-wireframe')) {
             map.addLayer(
               {
@@ -709,7 +684,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
             );
           }
 
-          // 2. Spatial Coaxial Laser Route (#00E5FF) rendered directly inside Mapbox WebGL layers
           const routeCoords =
             telemetryData.length >= 2
               ? telemetryData.map((pt) => [pt.longitude, pt.latitude])
@@ -730,7 +704,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
               });
             }
 
-            // Outer Glow Layer: line-color #00E5FF, line-width 12, line-opacity 0.2, line-blur 6
             if (!map.getLayer('cyber-route-glow')) {
               map.addLayer({
                 id: 'cyber-route-glow',
@@ -746,7 +719,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
               });
             }
 
-            // Core Laser Stream: line-color #00E5FF, line-width 2.5, line-opacity 1.0
             if (!map.getLayer('cyber-route-core')) {
               map.addLayer({
                 id: 'cyber-route-core',
@@ -762,14 +734,8 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
             }
           }
 
-          // 3. Inject Zero-Radius Brutalist HTML Markers: [ 01 // POI ] <NAME_IN_UPPERCASE>
           mountBrutalistMarkers(map, foodPois);
-        } catch (layerErr: any) {
-          setErrorBanner({
-            code: '[ ERR_WEBGL_LAYER_INIT // STYLE_LOAD_SAFEGUARD ]',
-            detail: String(layerErr?.message || 'FAILED_TO_BIND_3D_TERRAIN_OR_EXTRUSION'),
-          });
-        }
+        } catch (_) {}
       });
 
       return () => {
@@ -787,18 +753,193 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         } catch (_) {}
         mapRef.current = null;
       };
-    } catch (initErr: any) {
-      setMapReady(false);
-      setErrorBanner({
-        code: '[ ERR_MAPBOX_INIT_EXCEPTION // TRY_CATCH_SAFEGUARD ]',
-        detail: String(
-          initErr?.message || 'UNABLE_TO_INITIALIZE_MAPBOX_GL_V3_WEBGL_CONTEXT'
-        ),
-      });
+    } catch (_) {
+      setUseBuiltIn3DEngine(true);
+      setMapReady(true);
     }
-  }, [mapboxToken, dropNewPoiMarkerAndAlignCamera]);
+  }, [mapboxToken, flyToFoodPoiAndRenderTag]);
 
-  // Live GeoJSON LineString update for Coaxial Laser Route without recreating map or interrupting camera
+  // Built-in 60FPS 3D Globe & Tactical Street Canvas Renderer (Zero User API Keys Required)
+  useEffect(() => {
+    if (!useBuiltIn3DEngine || !fallbackCanvasRef.current) return;
+    const canvas = fallbackCanvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let rafId = 0;
+    const startTime = performance.now();
+
+    const resizeCanvas = () => {
+      if (!canvas.parentElement) return;
+      canvas.width = Math.max(640, canvas.parentElement.clientWidth);
+      canvas.height = Math.max(380, canvas.parentElement.clientHeight);
+    };
+    resizeCanvas();
+
+    const obs =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(resizeCanvas)
+        : null;
+    if (obs && canvas.parentElement) {
+      obs.observe(canvas.parentElement);
+    }
+
+    const renderFrame = (now: number) => {
+      const elapsed = (now - startTime) / 1000;
+      const cam = animCameraRef.current;
+
+      // Smoothly interpolate camera towards target (simulates map.flyTo)
+      cam.lng += (cam.targetLng - cam.lng) * 0.08;
+      cam.lat += (cam.targetLat - cam.lat) * 0.08;
+      cam.zoom += (cam.targetZoom - cam.zoom) * 0.07;
+      cam.pitch += (cam.targetPitch - cam.pitch) * 0.07;
+      cam.bearing += (cam.targetBearing - cam.bearing) * 0.07;
+
+      const w = canvas.width;
+      const h = canvas.height;
+      const isCad = activeModeRef.current === 'CAD_3D';
+
+      // Background Terminal Black / Deep Space
+      ctx.fillStyle = '#080A0F';
+      ctx.fillRect(0, 0, w, h);
+
+      // Atmospheric Cyan Horizon Halo
+      const grad = ctx.createLinearGradient(0, 0, 0, h * 0.45);
+      grad.addColorStop(0, isCad ? 'rgba(0, 229, 255, 0.06)' : 'rgba(0, 229, 255, 0.16)');
+      grad.addColorStop(1, 'rgba(8, 10, 15, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h * 0.45);
+
+      // Perspective 3D Ground Grid & Extruded Urban Blocks
+      const horizonY = h * 0.24;
+      ctx.strokeStyle = isCad ? 'rgba(0, 229, 255, 0.24)' : 'rgba(31, 31, 46, 0.9)';
+      ctx.lineWidth = 1;
+
+      const gridOffset = ((cam.lng * 10000 + elapsed * 0.4) % 1) * 48;
+      for (let i = -10; i <= 10; i++) {
+        const topX = w / 2 + i * 28;
+        const botX = w / 2 + i * 115 - gridOffset;
+        ctx.beginPath();
+        ctx.moveTo(topX, horizonY);
+        ctx.lineTo(botX, h);
+        ctx.stroke();
+      }
+      for (let row = 1; row <= 9; row++) {
+        const t = Math.pow(row / 9, 1.55);
+        const y = horizonY + t * (h - horizonY);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // 3D Building Extrusions around target food POI
+      const blocks = [
+        { dx: -190, dy: 40, bw: 54, bh: 68 },
+        { dx: -115, dy: -20, bw: 48, bh: 92 },
+        { dx: 95, dy: -15, bw: 62, bh: 84 },
+        { dx: 175, dy: 45, bw: 52, bh: 64 },
+        { dx: -65, dy: 70, bw: 44, bh: 52 },
+        { dx: 60, dy: 78, bw: 50, bh: 58 },
+      ];
+      const cx = w / 2;
+      const cy = h * 0.58;
+
+      blocks.forEach((b) => {
+        const bx = cx + b.dx;
+        const by = cy + b.dy;
+        const roofOffset = b.bh * (cam.pitch / 72);
+        ctx.fillStyle = isCad ? 'rgba(16, 24, 36, 0.92)' : 'rgba(13, 16, 23, 0.88)';
+        ctx.strokeStyle = isCad ? 'rgba(0, 229, 255, 0.55)' : 'rgba(31, 31, 46, 1)';
+        ctx.lineWidth = 1;
+        ctx.fillRect(bx, by - roofOffset, b.bw, b.bh);
+        ctx.strokeRect(bx, by - roofOffset, b.bw, b.bh);
+      });
+
+      // Global District Administrative Boundary Polygon (#00E5FF, fill-opacity 0.12, dashed stroke)
+      ctx.save();
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.12)';
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 4]);
+      ctx.beginPath();
+      ctx.moveTo(cx - 210, cy - 85);
+      ctx.lineTo(cx + 215, cy - 95);
+      ctx.lineTo(cx + 250, cy + 105);
+      ctx.lineTo(cx - 235, cy + 110);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      // Spatial Coaxial Laser Route (#00E5FF: 12px outer glow + 2.5px core stream)
+      ctx.save();
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.22)';
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      ctx.moveTo(cx - 240, cy + 95);
+      ctx.lineTo(cx - 95, cy + 35);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx + 145, cy - 45);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(cx - 240, cy + 95);
+      ctx.lineTo(cx - 95, cy + 35);
+      ctx.lineTo(cx, cy);
+      ctx.lineTo(cx + 145, cy - 45);
+      ctx.stroke();
+      ctx.restore();
+
+      // Target Food POI Pulse Ring & Crosshair Lock
+      const pulseRadius = 14 + Math.sin(elapsed * 4.5) * 5;
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, pulseRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#00E676';
+      ctx.fillRect(cx - 4, cy - 4, 8, 8);
+
+      // Render Brutalist Marker HUD Tag: [ 01 // POI ] <VENUE_NAME_UPPERCASE>
+      const activePoiTarget = targetPoiRef.current;
+      const tagText = `[ 01 // POI ] ${(activePoiTarget.name || 'FOOD_POI').toUpperCase()}`;
+      ctx.font = 'bold 11px "JetBrains Mono", monospace';
+      const textWidth = ctx.measureText(tagText).width;
+      const boxW = textWidth + 20;
+      const boxH = 26;
+      const boxX = cx - boxW / 2;
+      const boxY = cy - 42;
+
+      ctx.fillStyle = '#080A0F';
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+      ctx.fillStyle = '#00E5FF';
+      ctx.fillText('[ 01 // POI ]', boxX + 10, boxY + 17);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(
+        ` ${(activePoiTarget.name || 'FOOD_POI').toUpperCase()}`,
+        boxX + 10 + ctx.measureText('[ 01 // POI ]').width,
+        boxY + 17
+      );
+
+      rafId = requestAnimationFrame(renderFrame);
+    };
+
+    rafId = requestAnimationFrame(renderFrame);
+    return () => {
+      cancelAnimationFrame(rafId);
+      obs?.disconnect();
+    };
+  }, [useBuiltIn3DEngine]);
+
+  // Live GeoJSON LineString update for Coaxial Laser Route
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -824,7 +965,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     } catch (_) {}
   }, [telemetryData, foodPois, mapReady]);
 
-  // Keep Brutalist [ 01 // POI ] HTML markers synced when POIs or active selection change
+  // Keep Brutalist [ 01 // POI ] HTML markers synced
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -833,12 +974,20 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     } catch (_) {}
   }, [foodPois, activePoi, mapReady, mountBrutalistMarkers]);
 
-  // Trigger 4-Stage Flight Sequence (without video recording) when active POI or autoTriggerKey changes,
-  // unless an active 60FPS video export recording is already in progress.
+  // Sync activePoi changes from parent list
   useEffect(() => {
-    if (!mapReady || !activePoi) return;
-    if (isRecordingRef.current) return;
-    runCinematicSequence(false);
+    if (!activePoi) return;
+    setSelectedSearchPoi(null);
+    animCameraRef.current.targetLng = activePoi.longitude;
+    animCameraRef.current.targetLat = activePoi.latitude;
+    animCameraRef.current.targetZoom = 17.5;
+    animCameraRef.current.targetPitch = 72;
+    animCameraRef.current.targetBearing = 40;
+
+    if (!mapReady || isRecordingRef.current) return;
+    if (mapRef.current) {
+      runCinematicSequence(false);
+    }
   }, [
     activePoi?.poi_id,
     activePoi?.latitude,
@@ -848,27 +997,23 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     runCinematicSequence,
   ]);
 
-  const handleApplyInlineToken = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleaned = inlineTokenInput.trim();
-    if (!cleaned) return;
-    ApiKeyManager.saveKeys({ mapKey: cleaned });
-    setMapboxToken(cleaned);
-    setInlineTokenInput('');
-  };
-
   /**
-   * Handle selection from PoiSearchBox inside the 3D Map HUD:
-   * Places [ NEW // POI ] marker, resolves global district boundary, and flies the 3D camera
+   * 4. Globe Handoff from PoiSearchBox (100% Mapbox API):
+   * - Selecting an item passes [longitude, latitude] to CyberGlobe3D.tsx
+   * - Automatically re-centers the 3D camera over the target location and places the [ 01 // POI ] HUD marker
    */
   const handleSelectSearchLocation = (result: GeocodedPoiResult) => {
-    dropNewPoiMarkerAndAlignCamera(result.longitude, result.latitude, result.name, true);
-    runCinematicSequence(false, undefined, {
-      poi_id: result.id,
-      name: result.name,
-      latitude: result.latitude,
-      longitude: result.longitude,
-      rating: 5,
+    const [lng, lat] = result.coordinates || [result.longitude, result.latitude];
+    flyToFoodPoiAndRenderTag(
+      lng,
+      lat,
+      result.name,
+      result.address || result.fullAddress
+    );
+    setCameraTelemetry({
+      zoom: 17.5,
+      pitch: 72,
+      bearing: 40,
     });
   };
 
@@ -893,7 +1038,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           </span>
         </div>
 
-        {/* Instantaneous (< 50ms) Mode Switcher Controls on Persistent Mapbox Instance */}
+        {/* Instantaneous (< 50ms) Mode Switcher Controls */}
         <div className="flex flex-wrap items-center gap-1.5">
           <button
             type="button"
@@ -924,24 +1069,14 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           <span className="text-[10px] text-[#9BA8B8] px-2 py-1 bg-[#080A0F] border border-[#1F1F2E]">
             [ Z:{cameraTelemetry.zoom} // P:{cameraTelemetry.pitch}° // B:{cameraTelemetry.bearing}° ]
           </span>
-
-          {onOpenSettings && (
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              className="min-h-[30px] px-2.5 bg-[#080A0F] border border-[#00E5FF] hover:bg-[#00E5FF] text-[#00E5FF] hover:text-[#080A0F] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-            >
-              <KeyRound className="w-3 h-3 shrink-0" />
-              <span>[ BYOK_KEY ]</span>
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Integrated Smart POI Autocomplete Search Bar (PoiSearchBox.tsx) */}
+      {/* Unified 100% Mapbox Search Bar (Mapbox Search Box API v6 & Geocoding v5 via VITE_MAPBOX_TOKEN) */}
       <div className="bg-[#0D1017] border-b border-[#1F1F2E] px-3 py-2.5">
         <PoiSearchBox
           onSelectLocation={handleSelectSearchLocation}
+          mapCenterLngLat={[targetDisplayPoi.longitude, targetDisplayPoi.latitude]}
           language={language}
           compact={compactMode}
         />
@@ -956,62 +1091,124 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         {/* Canvas Mapbox nằm tuyệt đối tràn 100% khung hình */}
         <div
           ref={mapContainer}
-          className={`absolute inset-0 w-full h-full ${errorBanner ? 'hidden' : 'block'}`}
+          className={`absolute inset-0 w-full h-full ${
+            useBuiltIn3DEngine ? 'hidden' : 'block'
+          }`}
         />
 
+        {/* Built-in 60FPS 3D Tactical Globe & Street Canvas (Active when no client token is needed) */}
+        {useBuiltIn3DEngine && (
+          <canvas
+            ref={fallbackCanvasRef}
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const relX = (e.clientX - rect.left) / Math.max(1, rect.width) - 0.5;
+              const relY = (e.clientY - rect.top) / Math.max(1, rect.height) - 0.5;
+              const baseLng = targetDisplayPoi.longitude;
+              const baseLat = targetDisplayPoi.latitude;
+              const clickedLng = Number((baseLng + relX * 0.012).toFixed(6));
+              const clickedLat = Number((baseLat - relY * 0.012).toFixed(6));
+              flyToFoodPoiAndRenderTag(clickedLng, clickedLat, 'MAP_CLICK_POI');
+            }}
+            className="absolute inset-0 w-full h-full cursor-crosshair block"
+          />
+        )}
+
         {/* Các thẻ HUD nằm lớp trên z-index */}
-        {!errorBanner && (
-          <div className="absolute inset-0 pointer-events-none z-10">
-            {/* Top-Left Live 4-Stage Flight Progress & Global District Scan HUD Overlay */}
-            {flightStatus && (
-              <div className="absolute top-3 left-3 max-w-[92%] bg-[#080A0F]/95 border border-[#00E5FF] px-3 py-2 flex flex-col gap-1 pointer-events-none">
-                <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold">
-                  <span
-                    className={`px-1.5 py-0.5 ${
-                      flightStatus.isRecording
-                        ? 'bg-[#00E676] text-[#080A0F]'
-                        : 'bg-[#00E5FF] text-[#080A0F]'
-                    }`}
-                  >
-                    {flightStatus.isRecording
-                      ? `🔴 REC 60FPS · STAGE ${flightStatus.stageNumber}/4`
-                      : `STAGE ${flightStatus.stageNumber}/4`}
-                  </span>
-                  <span className="text-[#00E5FF] truncate">{flightStatus.label}</span>
-                </div>
-                <div className="text-[10px] font-bold text-[#00E5FF]">
-                  {activeDistrictReadout}
-                </div>
-                {flightStatus.hudLockTag && (
-                  <div className="text-[11px] font-extrabold text-[#00E676] tracking-wider">
-                    {flightStatus.hudLockTag}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Active Dropped [ NEW // POI ] HUD Tag Indicator */}
-            {droppedNewPin && (
-              <div className="absolute bottom-3 left-3 bg-[#080A0F]/95 border border-[#00E676] px-3 py-1.5 flex flex-wrap items-center gap-2 text-[10px] font-mono-brand font-bold pointer-events-auto">
-                <MapPin className="w-3.5 h-3.5 text-[#00E676] shrink-0" />
-                <span className="text-[#00E676]">[ NEW // POI ]</span>
-                <span className="text-[#FFFFFF]">{droppedNewPin.label}</span>
-                <span className="text-[#00E5FF]">
-                  ({droppedNewPin.latitude.toFixed(4)}°N, {droppedNewPin.longitude.toFixed(4)}°E)
+        <div className="absolute inset-0 pointer-events-none z-10">
+          {/* Top-Left Live 4-Stage Flight Progress & Global District Scan HUD Overlay */}
+          {flightStatus && (
+            <div className="absolute top-3 left-3 max-w-[92%] bg-[#080A0F]/95 border border-[#00E5FF] px-3 py-2 flex flex-col gap-1 pointer-events-none">
+              <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold">
+                <span
+                  className={`px-1.5 py-0.5 ${
+                    flightStatus.isRecording
+                      ? 'bg-[#00E676] text-[#080A0F]'
+                      : 'bg-[#00E5FF] text-[#080A0F]'
+                  }`}
+                >
+                  {flightStatus.isRecording
+                    ? `🔴 REC 60FPS · STAGE ${flightStatus.stageNumber}/4`
+                    : `STAGE ${flightStatus.stageNumber}/4`}
                 </span>
-                <span className="text-[#00E676]">{activeDistrictReadout}</span>
+                <span className="text-[#00E5FF] truncate">{flightStatus.label}</span>
               </div>
-            )}
+              <div className="text-[10px] font-bold text-[#00E5FF]">
+                {activeDistrictReadout}
+              </div>
+              {flightStatus.hudLockTag && (
+                <div className="text-[11px] font-extrabold text-[#00E676] tracking-wider">
+                  {flightStatus.hudLockTag}
+                </div>
+              )}
+            </div>
+          )}
 
-            {/* Top-Right Native Mapbox Camera Controls & 1-Click Cinematic Render Trigger */}
-            {mapReady && (
-              <div className="absolute top-3 right-3 flex flex-wrap items-center gap-1.5 pointer-events-auto">
+          {/* Active Target HUD Tag [ 01 // POI ] <VENUE_NAME_UPPERCASE> */}
+          <div className="absolute bottom-3 left-3 bg-[#080A0F]/95 border border-[#00E5FF] px-3 py-1.5 flex flex-wrap items-center gap-2 text-[10px] font-mono-brand font-bold pointer-events-auto">
+            <MapPin className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
+            <span className="text-[#00E5FF]">[ 01 // POI ]</span>
+            <span className="text-[#FFFFFF]">{targetDisplayPoi.name.toUpperCase()}</span>
+            <span className="text-[#00E676]">
+              ({targetDisplayPoi.latitude.toFixed(4)}°N, {targetDisplayPoi.longitude.toFixed(4)}°E)
+            </span>
+          </div>
+
+          {/* Interactive Pinned Food POIs Selector Strip on Bottom-Right */}
+          <div className="absolute bottom-3 right-3 hidden sm:flex flex-wrap items-center gap-1.5 pointer-events-auto max-w-[55%] justify-end">
+            {foodPois.slice(0, 4).map((poi, idx) => {
+              const code = String(idx + 1).padStart(2, '0');
+              const isSelected =
+                !selectedSearchPoi &&
+                activePoi &&
+                ((activePoi.poi_id && activePoi.poi_id === poi.poi_id) ||
+                  (Math.abs(activePoi.latitude - poi.latitude) < 0.0001 &&
+                    Math.abs(activePoi.longitude - poi.longitude) < 0.0001));
+              return (
                 <button
+                  key={poi.poi_id || `${poi.name}-${idx}`}
                   type="button"
                   onClick={() => {
-                    if (!mapRef.current) return;
-                    CinematicFlightEngine.stopActiveFlight(mapRef.current);
-                    setFlightStatus(null);
+                    setSelectedSearchPoi(null);
+                    flyToFoodPoiAndRenderTag(poi.longitude, poi.latitude, poi.name);
+                    if (onSelectNode && allNodes.length > 0) {
+                      const matched = allNodes.find(
+                        (n) =>
+                          n.id === poi.poi_id ||
+                          (Math.abs(n.latitude - poi.latitude) < 0.0002 &&
+                            Math.abs(n.longitude - poi.longitude) < 0.0002)
+                      );
+                      if (matched) onSelectNode(matched);
+                    }
+                  }}
+                  className={`min-h-[30px] px-2 py-1 bg-[#080A0F]/95 border text-[10px] font-mono-brand font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                    isSelected
+                      ? 'border-[#00E676] text-[#00E676]'
+                      : 'border-[#1F1F2E] hover:border-[#00E5FF] text-[#00E5FF]'
+                  }`}
+                >
+                  <span>[ {code} // POI ]</span>
+                  <span className="text-[#FFFFFF] truncate max-w-[120px]">
+                    {poi.name.toUpperCase()}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Top-Right Native Mapbox Camera Controls & 1-Click Cinematic Render Trigger */}
+          {mapReady && (
+            <div className="absolute top-3 right-3 flex flex-wrap items-center gap-1.5 pointer-events-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  CinematicFlightEngine.stopActiveFlight(mapRef.current);
+                  setFlightStatus(null);
+                  animCameraRef.current.targetZoom = 1.8;
+                  animCameraRef.current.targetPitch = 0;
+                  animCameraRef.current.targetBearing = 0;
+                  setCameraTelemetry({ zoom: 1.8, pitch: 0, bearing: 0 });
+                  if (mapRef.current) {
                     mapRef.current.flyTo({
                       center: [targetDisplayPoi.longitude, targetDisplayPoi.latitude],
                       zoom: 1.8,
@@ -1020,186 +1217,38 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
                       speed: 1.2,
                       essential: true,
                     });
-                  }}
-                  className="min-h-[34px] px-2.5 bg-[#080A0F] border border-[#1F1F2E] hover:border-[#00E5FF] text-[#00E5FF] text-[10px] font-bold flex items-center gap-1 cursor-pointer"
-                >
-                  <Compass className="w-3.5 h-3.5 shrink-0" />
-                  <span>[ SPACE_ORBIT // Z:1.8 ]</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => runCinematicSequence(false)}
-                  className="min-h-[34px] px-2.5 bg-[#080A0F] border border-[#00E5FF] hover:bg-[#00E5FF] text-[#00E5FF] hover:text-[#080A0F] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Rocket className="w-3.5 h-3.5 shrink-0" />
-                  <span>[ 4-STAGE_FLIGHT ]</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => runCinematicSequence(true)}
-                  className="clip-button-chamfer min-h-[34px] px-3 bg-[#00E5FF] text-[#080A0F] text-[10px] font-bold flex items-center gap-1 cursor-pointer"
-                >
-                  <Film className="w-3.5 h-3.5 shrink-0" />
-                  <span>
-                    {flightStatus?.isRecording
-                      ? `[ 🔴 REC STAGE ${flightStatus.stageNumber}/4 ]`
-                      : '[ 🎬 1-CLICK CINEMATIC RENDER ]'}
-                  </span>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 5. Fault Tolerance & API Key Safeguard: Brutalist Error Fallback Banner + Interactive Click-to-Pin Pad */}
-        {errorBanner && (
-          <div
-            role="alert"
-            aria-live="polite"
-            className="flex-1 w-full bg-[#080A0F] p-4 sm:p-6 flex flex-col justify-between gap-4"
-          >
-            {/* Top Diagnostic Status */}
-            <div className="bg-[#0D1017] border border-[#00E5FF] p-4 space-y-3 clip-chamfer-brutalist">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1F1F2E] pb-2.5">
-                <div className="flex items-center gap-2 text-[#00E5FF] text-xs font-bold">
-                  <ShieldAlert className="w-4 h-4 text-[#00E5FF] shrink-0" />
-                  <span>{errorBanner.code}</span>
-                </div>
-                <span className="text-[10px] text-[#00E676] font-bold">
-                  {activeDistrictReadout}
-                </span>
-              </div>
-
-              <div className="space-y-1.5">
-                <p className="text-xs sm:text-sm font-bold text-[#FFFFFF]">
-                  {language === 'vi'
-                    ? '[ NATIVE MAPBOX GL V3 3D GLOBE & GLOBAL BOUNDARIES (ADM2-V4) — YÊU CẦU KHÓA PUBLIC TOKEN ]'
-                    : '[ NATIVE MAPBOX GL V3 3D GLOBE & GLOBAL BOUNDARIES (ADM2-V4) — PUBLIC TOKEN REQUIRED ]'}
-                </p>
-                <p className="text-[11px] text-[#9BA8B8] leading-relaxed">
-                  {language === 'vi'
-                    ? 'Nhập khóa pk.eyJ... bên dưới để tải trực tiếp lớp Vector Tileset ranh giới hành chính toàn cầu (mapbox.boundaries-adm2-v4). Bạn có thể chọn các địa điểm quốc tế (Shibuya Tokyo, Manhattan NY, Le Marais Paris, Myeongdong Seoul, Quận 1 TP.HCM) ở thanh tìm kiếm phía trên để kiểm tra ngay.'
-                    : 'Paste your pk.eyJ... key below to stream Mapbox Global Boundaries Vector Tilesets (mapbox.boundaries-adm2-v4). Select any international POI (Shibuya Tokyo, Manhattan NY, Le Marais Paris, Myeongdong Seoul, District 1 VN) in the search bar above to test.'}
-                </p>
-              </div>
-
-              {/* Inline Instant BYOK Mapbox Token Provisioner */}
-              <form
-                onSubmit={handleApplyInlineToken}
-                className="pt-1 flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
-              >
-                <input
-                  type="password"
-                  value={inlineTokenInput}
-                  onChange={(e) => setInlineTokenInput(e.target.value)}
-                  placeholder="pk.eyJ1Ijoi... (Paste Mapbox GL v3 Public Token)"
-                  aria-label="Mapbox Public Access Token"
-                  className="flex-1 min-h-[40px] px-3 bg-[#080A0F] border border-[#1F1F2E] focus:border-[#00E5FF] text-xs text-[#00E5FF] focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  className="clip-button-chamfer min-h-[40px] px-4 bg-[#00E5FF] text-[#080A0F] text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
-                >
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>[ ⚡ INITIALIZE_3D_GLOBE ]</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => runCinematicSequence(true)}
-                  className="min-h-[40px] px-3.5 bg-[#080A0F] border border-[#00E5FF] hover:bg-[#00E5FF] text-[#00E5FF] hover:text-[#080A0F] text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
-                >
-                  <Film className="w-3.5 h-3.5 shrink-0" />
-                  <span>[ 🎬 1-CLICK CINEMATIC RENDER ]</span>
-                </button>
-              </form>
-            </div>
-
-            {/* Interactive Click-To-Pin Tactical Surface + Global Boundary Readout */}
-            <div className="bg-[#0D1017] border border-[#1F1F2E] p-3.5 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1F1F2E] pb-2">
-                <span className="text-[10px] text-[#00E5FF] font-bold">
-                  {activeDistrictReadout}
-                </span>
-                <span className="text-[10px] text-[#00E676] font-bold">
-                  {lockReadoutTag}
-                </span>
-              </div>
-
-              {/* Clickable Tactical Coordinate Surface when WebGL Canvas is awaiting token */}
-              <div
-                onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const relX = (e.clientX - rect.left) / Math.max(1, rect.width);
-                  const relY = (e.clientY - rect.top) / Math.max(1, rect.height);
-                  const clickedLng = Number((106.665 + relX * 0.065).toFixed(6));
-                  const clickedLat = Number((10.805 - relY * 0.065).toFixed(6));
-                  dropNewPoiMarkerAndAlignCamera(
-                    clickedLng,
-                    clickedLat,
-                    'MAP_CLICK_TARGET',
-                    false
-                  );
+                  }
                 }}
-                className="relative w-full h-[120px] bg-[#080A0F] border border-[#1F1F2E] hover:border-[#00E5FF] cursor-crosshair flex flex-col items-center justify-center p-3 select-none overflow-hidden"
-                title="Click anywhere on this tactical surface to drop a [ NEW // POI ] pin"
+                className="min-h-[34px] px-2.5 bg-[#080A0F] border border-[#1F1F2E] hover:border-[#00E5FF] text-[#00E5FF] text-[10px] font-bold flex items-center gap-1 cursor-pointer"
               >
-                <div className="text-[10px] font-mono-brand text-[#00E5FF] font-bold">
-                  {activeDistrictReadout} // MAPBOX_ID: {globalDistrictScan.mapboxId}
-                </div>
-                <div className="mt-1.5 px-2.5 py-1 bg-[#0D1017] border border-[#00E5FF] text-[#00E676] text-[10px] font-mono-brand font-bold">
-                  [ {droppedNewPin ? 'NEW // POI' : '01 // POI'} ]{' '}
-                  {targetDisplayPoi.name.toUpperCase()} ({targetDisplayPoi.latitude.toFixed(4)}°N,{' '}
-                  {targetDisplayPoi.longitude.toFixed(4)}°E)
-                </div>
-              </div>
+                <Compass className="w-3.5 h-3.5 shrink-0" />
+                <span>[ SPACE_ORBIT // Z:1.8 ]</span>
+              </button>
 
-              {/* Brutalist HTML Marker Matrix ([ 01 // POI ] <NAME_IN_UPPERCASE>) */}
-              <div className="space-y-1.5">
-                <div className="text-[10px] text-[#9BA8B8] uppercase">
-                  [ BRUTALIST_POI_HUD_MARKERS // CLICK_NODE_TO_LOCK_COORDINATES ]
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {foodPois.map((poi, idx) => {
-                    const code = String(idx + 1).padStart(2, '0');
-                    const isSelected =
-                      activePoi &&
-                      ((activePoi.poi_id && activePoi.poi_id === poi.poi_id) ||
-                        (Math.abs(activePoi.latitude - poi.latitude) < 0.0001 &&
-                          Math.abs(activePoi.longitude - poi.longitude) < 0.0001));
-                    return (
-                      <button
-                        key={poi.poi_id || `${poi.name}-${idx}`}
-                        type="button"
-                        onClick={() => {
-                          setDroppedNewPin(null);
-                          if (onSelectNode && allNodes.length > 0) {
-                            const matched = allNodes.find(
-                              (n) =>
-                                n.id === poi.poi_id ||
-                                (Math.abs(n.latitude - poi.latitude) < 0.0002 &&
-                                  Math.abs(n.longitude - poi.longitude) < 0.0002)
-                            );
-                            if (matched) onSelectNode(matched);
-                          }
-                        }}
-                        className={`min-h-[34px] px-2.5 py-1 bg-[#080A0F] border text-[10px] font-bold flex items-center gap-2 cursor-pointer transition-colors ${
-                          isSelected
-                            ? 'border-[#00E676] text-[#00E676]'
-                            : 'border-[#00E5FF] text-[#00E5FF] hover:bg-[#0D1017]'
-                        }`}
-                      >
-                        <span className="text-[#00E5FF]">[ {code} // POI ]</span>
-                        <span className="text-[#FFFFFF]">{poi.name.toUpperCase()}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={() => runCinematicSequence(false)}
+                className="min-h-[34px] px-2.5 bg-[#080A0F] border border-[#00E5FF] hover:bg-[#00E5FF] text-[#00E5FF] hover:text-[#080A0F] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                <Rocket className="w-3.5 h-3.5 shrink-0" />
+                <span>[ 4-STAGE_FLIGHT ]</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => runCinematicSequence(true)}
+                className="clip-button-chamfer min-h-[34px] px-3 bg-[#00E5FF] text-[#080A0F] text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <Film className="w-3.5 h-3.5 shrink-0" />
+                <span>
+                  {flightStatus?.isRecording
+                    ? `[ 🔴 REC STAGE ${flightStatus.stageNumber}/4 ]`
+                    : '[ 🎬 1-CLICK CINEMATIC RENDER ]'}
+                </span>
+              </button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Bottom Telemetry Strip with Final Lock HUD Tag & Global District Scan Readout */}

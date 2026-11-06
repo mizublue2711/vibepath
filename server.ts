@@ -3,6 +3,7 @@ import path from "path";
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import dotenv from "dotenv";
 import { SchemaValidator } from "./src/utils/schema-validator";
+import { searchFoodPoisServerSide } from "./src/services/poiSearchWorker";
 
 dotenv.config();
 
@@ -30,6 +31,24 @@ function createGeminiClient(customKey?: string) {
 // Health check
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "VibePath Kinetic Engine", timestamp: new Date().toISOString() });
+});
+
+// Mapbox Search Route (/api/poi-search) — 100% Mapbox Search Box API v6 & Geocoding v5 using VITE_MAPBOX_TOKEN
+app.get("/api/poi-search", async (req, res) => {
+  try {
+    const query = String(req.query.q || "").trim();
+    if (!query) {
+      return res.json([]);
+    }
+    const results = await searchFoodPoisServerSide(query, {
+      VITE_MAPBOX_TOKEN: process.env.VITE_MAPBOX_TOKEN,
+    });
+    res.header("Access-Control-Allow-Origin", "*");
+    return res.json(results);
+  } catch (err: any) {
+    console.warn("[/api/poi-search] Mapbox search error:", err);
+    return res.json([]);
+  }
 });
 
 // Explicit static serving for 3D GLB models with CORS headers

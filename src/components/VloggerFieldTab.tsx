@@ -646,10 +646,11 @@ export const VloggerFieldTab: React.FC<VloggerFieldTabProps> = ({
             </div>
           )}
 
-          {/* 0. Smart POI Autocomplete Search & Link Parser (Replaces manual long link dependency) */}
+          {/* 0. Smart POI Autocomplete Search & Link Parser (100% Mapbox API) */}
           <div className="space-y-1.5 bg-[#080A0F] border border-[#1F1F2E] p-3">
             <PoiSearchBox
               onSelectLocation={handleSelectAutocompletePoi}
+              mapCenterLngLat={[spotLng, spotLat]}
               language={language}
             />
           </div>
