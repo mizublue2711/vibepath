@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { ApiKeyManager } from '../services/apiKeyManager';
+import { getStoredThemeConfig } from '../context/ThemeContext';
 import { MapModeController, UnifiedMapMode } from '../services/mapModeController';
 import {
   CinematicFlightEngine,
@@ -23,7 +24,6 @@ import {
   Rocket,
   CheckCircle2,
   Compass,
-  Crosshair,
   Layers,
   Film,
   MapPin,
@@ -63,6 +63,7 @@ export interface CyberGlobe3DProps {
     name?: string;
     address?: string;
   }) => void;
+  onDistrictResolved?: (districtLabel: string) => void;
   language?: LanguageCode;
   autoTriggerKey?: number;
   compactMode?: boolean;
@@ -87,6 +88,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
   onSelectNode,
   onPickCoordinate,
   onAddPoiFromMap,
+  onDistrictResolved,
   language = 'vi',
   autoTriggerKey = 0,
   compactMode = false,
@@ -97,11 +99,9 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const newPinMarkerRef = useRef<mapboxgl.Marker | null>(null);
 
-  // Unified Map Mode State (DEM_3D vs CAD_3D)
   const [activeMode, setActiveMode] = useState<UnifiedMapMode>('DEM_3D');
   const activeModeRef = useRef<UnifiedMapMode>('DEM_3D');
 
-  // Selected / Dropped Food Venue Target ([ 01 // POI ])
   const [selectedSearchPoi, setSelectedSearchPoi] = useState<{
     latitude: number;
     longitude: number;
@@ -109,18 +109,17 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     address?: string;
   } | null>(null);
 
-  // Global Administrative Boundary HUD Readout State
   const [globalDistrictScan, setGlobalDistrictScan] =
     useState<GlobalDistrictResolution>({
       mapboxId: 'dXJuOm1ieGJuZDo2ODg0Njp2NA',
-      districtName: 'DISTRICT 1',
+      districtName: 'District 1, Ben Thanh',
       countryCode: 'VN',
-      hudReadout: '[ GLOBAL_DISTRICT_SCAN // DISTRICT 1, VN ]',
+      hudReadout: 'District 1, Ben Thanh',
     });
 
-  // 4-Stage Cinematic Flight & 60FPS Video Recorder Status
   const [flightStatus, setFlightStatus] = useState<FlightStageUpdate | null>(null);
   const isRecordingRef = useRef<boolean>(false);
+  const accentColorRef = useRef<string>(getStoredThemeConfig().accentColor || '#00E5FF');
 
   const [mapboxToken, setMapboxToken] = useState<string>(() => {
     return ApiKeyManager.getMapKey() || (import.meta as any).env?.VITE_MAPBOX_TOKEN || '';
@@ -204,8 +203,18 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         ApiKeyManager.getMapKey() || (import.meta as any).env?.VITE_MAPBOX_TOKEN || '';
       setMapboxToken(updatedToken);
     };
+    const handleThemeUpdated = (e: Event) => {
+      const custom = e as CustomEvent<{ accentColor?: string }>;
+      const nextAccent = custom.detail?.accentColor || getStoredThemeConfig().accentColor || '#00E5FF';
+      accentColorRef.current = nextAccent;
+      MapModeController.updateRouteAccentColor(mapRef.current, nextAccent);
+    };
     window.addEventListener('vibepath_apikeys_updated', handleKeysUpdated);
-    return () => window.removeEventListener('vibepath_apikeys_updated', handleKeysUpdated);
+    window.addEventListener('vibepath_theme_updated', handleThemeUpdated);
+    return () => {
+      window.removeEventListener('vibepath_apikeys_updated', handleKeysUpdated);
+      window.removeEventListener('vibepath_theme_updated', handleThemeUpdated);
+    };
   }, []);
 
   // Resolve Global Administrative Boundary whenever target coordinates change
@@ -218,6 +227,9 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     ).then((res) => {
       if (cancelled) return;
       setGlobalDistrictScan(res);
+      if (onDistrictResolved) {
+        onDistrictResolved(res.hudReadout || 'District 1, Ben Thanh');
+      }
       if (mapRef.current && mapReady) {
         CinematicFlightEngine.applyGlobalDistrictBoundaryFilter(
           mapRef.current,
@@ -230,7 +242,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [targetDisplayPoi.longitude, targetDisplayPoi.latitude, mapReady]);
+  }, [targetDisplayPoi.longitude, targetDisplayPoi.latitude, mapReady, onDistrictResolved]);
 
   /**
    * Center the 3D camera over target food POI and render the HUD tag [ 01 // POI ] <VENUE_NAME_UPPERCASE>
@@ -360,15 +372,15 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         onStageChange: (update) => {
           isRecordingRef.current = update.isRecording;
           setFlightStatus(update);
-          if (update.stage === 'STAGE_1_ORBIT') {
+          if (update.stage === 'ORBIT') {
             animCameraRef.current.targetZoom = 1.8;
             animCameraRef.current.targetPitch = 0;
             animCameraRef.current.targetBearing = 0;
-          } else if (update.stage === 'STAGE_2_REGIONAL') {
+          } else if (update.stage === 'REGIONAL') {
             animCameraRef.current.targetZoom = 9.5;
             animCameraRef.current.targetPitch = 30;
             animCameraRef.current.targetBearing = -15;
-          } else if (update.stage === 'STAGE_3_DISTRICT_SCANNER') {
+          } else if (update.stage === 'DISTRICT_FOCUS') {
             animCameraRef.current.targetZoom = 13.8;
             animCameraRef.current.targetPitch = 45;
             animCameraRef.current.targetBearing = -35;
@@ -379,6 +391,9 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           }
           if (update.globalDistrictInfo) {
             setGlobalDistrictScan(update.globalDistrictInfo);
+            if (onDistrictResolved) {
+              onDistrictResolved(update.globalDistrictInfo.hudReadout || 'District 1, Ben Thanh');
+            }
           }
           window.dispatchEvent(
             new CustomEvent('vibepath_cinematic_status', { detail: update })
@@ -856,10 +871,12 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         ctx.strokeRect(bx, by - roofOffset, b.bw, b.bh);
       });
 
-      // Global District Administrative Boundary Polygon (#00E5FF, fill-opacity 0.12, dashed stroke)
+      const activeAccent = accentColorRef.current || '#00E5FF';
+
+      // Global District Administrative Boundary Polygon
       ctx.save();
-      ctx.fillStyle = 'rgba(0, 229, 255, 0.12)';
-      ctx.strokeStyle = '#00E5FF';
+      ctx.fillStyle = `${activeAccent}1F`;
+      ctx.strokeStyle = activeAccent;
       ctx.lineWidth = 2;
       ctx.setLineDash([8, 4]);
       ctx.beginPath();
@@ -872,9 +889,10 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       ctx.stroke();
       ctx.restore();
 
-      // Spatial Coaxial Laser Route (#00E5FF: 12px outer glow + 2.5px core stream)
+      // Spatial Coaxial Laser Route (Dynamic Brand Accent Color: 12px outer glow + 2.5px core stream)
       ctx.save();
-      ctx.strokeStyle = 'rgba(0, 229, 255, 0.22)';
+      ctx.strokeStyle = activeAccent;
+      ctx.globalAlpha = 0.26;
       ctx.lineWidth = 12;
       ctx.beginPath();
       ctx.moveTo(cx - 240, cy + 95);
@@ -883,7 +901,8 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       ctx.lineTo(cx + 145, cy - 45);
       ctx.stroke();
 
-      ctx.strokeStyle = '#00E5FF';
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = activeAccent;
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.moveTo(cx - 240, cy + 95);
@@ -895,7 +914,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
 
       // Target Food POI Pulse Ring & Crosshair Lock
       const pulseRadius = 14 + Math.sin(elapsed * 4.5) * 5;
-      ctx.strokeStyle = '#00E5FF';
+      ctx.strokeStyle = activeAccent;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(cx, cy, pulseRadius, 0, Math.PI * 2);
@@ -916,11 +935,11 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
 
       ctx.fillStyle = '#080A0F';
       ctx.fillRect(boxX, boxY, boxW, boxH);
-      ctx.strokeStyle = '#00E5FF';
+      ctx.strokeStyle = activeAccent;
       ctx.lineWidth = 1.5;
       ctx.strokeRect(boxX, boxY, boxW, boxH);
 
-      ctx.fillStyle = '#00E5FF';
+      ctx.fillStyle = activeAccent;
       ctx.fillText('[ 01 // POI ]', boxX + 10, boxY + 17);
       ctx.fillStyle = '#FFFFFF';
       ctx.fillText(
@@ -997,11 +1016,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     runCinematicSequence,
   ]);
 
-  /**
-   * 4. Globe Handoff from PoiSearchBox (100% Mapbox API):
-   * - Selecting an item passes [longitude, latitude] to CyberGlobe3D.tsx
-   * - Automatically re-centers the 3D camera over the target location and places the [ 01 // POI ] HUD marker
-   */
   const handleSelectSearchLocation = (result: GeocodedPoiResult) => {
     const [lng, lat] = result.coordinates || [result.longitude, result.latitude];
     flyToFoodPoiAndRenderTag(
@@ -1017,24 +1031,17 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     });
   };
 
-  const currentHudReadout = MapModeController.getHudReadout(activeMode);
-  const lockReadoutTag =
-    flightStatus?.hudLockTag ||
-    `[ 3D LOCK // ${targetDisplayPoi.latitude.toFixed(4)}°N, ${targetDisplayPoi.longitude.toFixed(4)}°E ]`;
-  const activeDistrictReadout =
-    flightStatus?.globalDistrictScanTag || globalDistrictScan.hudReadout;
-
   return (
     <div className="w-full max-w-full overflow-hidden bg-[#080A0F] border border-[#1F1F2E] flex flex-col">
-      {/* Top Cybernetic Swiss Brutalist Telemetry Header + Unified Map Mode Controller */}
+      {/* Clean Minimalist Map Control Bar */}
       <div className="bg-[#0D1017] border-b border-[#1F1F2E] px-3 py-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2 min-w-0">
           <Globe2 className="w-4 h-4 text-[#00E5FF] shrink-0" />
-          <span className="text-[10px] sm:text-xs font-bold text-[#00E5FF] tracking-wider truncate">
-            {currentHudReadout}
+          <span className="text-xs font-bold text-[#F3F6F9] tracking-wide truncate">
+            {targetDisplayPoi.name}
           </span>
-          <span className="text-[10px] font-bold text-[#00E676] bg-[#080A0F] border border-[#00E5FF] px-2 py-0.5 truncate">
-            {activeDistrictReadout}
+          <span className="text-[11px] font-medium text-[#9BA8B8] hidden sm:inline">
+            • {globalDistrictScan.hudReadout || 'District 1, Ben Thanh'}
           </span>
         </div>
 
@@ -1043,52 +1050,47 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           <button
             type="button"
             onClick={() => handleSwitchMode('DEM_3D')}
-            className={`min-h-[30px] px-2.5 border text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+            className={`min-h-[30px] px-2.5 border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
               activeMode === 'DEM_3D'
                 ? 'bg-[#00E5FF] border-[#00E5FF] text-[#080A0F]'
-                : 'bg-[#080A0F] border-[#1F1F2E] text-[#9BA8B8] hover:text-[#FFFFFF] hover:border-[#00E5FF]'
+                : 'bg-[#080A0F] border-[#1F1F2E] text-[#F3F6F9] hover:border-[#00E5FF]'
             }`}
           >
             <CheckCircle2 className="w-3 h-3 shrink-0" />
-            <span>[ MAPBOX DEM 3D ]</span>
+            <span>3D Terrain</span>
           </button>
 
           <button
             type="button"
             onClick={() => handleSwitchMode('CAD_3D')}
-            className={`min-h-[30px] px-2.5 border text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+            className={`min-h-[30px] px-2.5 border text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
               activeMode === 'CAD_3D'
                 ? 'bg-[#00E5FF] border-[#00E5FF] text-[#080A0F]'
-                : 'bg-[#080A0F] border-[#1F1F2E] text-[#9BA8B8] hover:text-[#FFFFFF] hover:border-[#00E5FF]'
+                : 'bg-[#080A0F] border-[#1F1F2E] text-[#F3F6F9] hover:border-[#00E5FF]'
             }`}
           >
             <Layers className="w-3 h-3 shrink-0" />
-            <span>[ VOLUMETRIC CAD 3D ]</span>
+            <span>Volumetric CAD</span>
           </button>
-
-          <span className="text-[10px] text-[#9BA8B8] px-2 py-1 bg-[#080A0F] border border-[#1F1F2E]">
-            [ Z:{cameraTelemetry.zoom} // P:{cameraTelemetry.pitch}° // B:{cameraTelemetry.bearing}° ]
-          </span>
         </div>
       </div>
 
-      {/* Unified 100% Mapbox Search Bar (Mapbox Search Box API v6 & Geocoding v5 via VITE_MAPBOX_TOKEN) */}
+      {/* Unified 100% Mapbox Search Bar */}
       <div className="bg-[#0D1017] border-b border-[#1F1F2E] px-3 py-2.5">
         <PoiSearchBox
           onSelectLocation={handleSelectSearchLocation}
           mapCenterLngLat={[targetDisplayPoi.longitude, targetDisplayPoi.latitude]}
           language={language}
-          compact={compactMode}
+          compact={true}
         />
       </div>
 
-      {/* Main Viewport: Chuẩn hóa Khung Div Container (relative + absolute inset-0 w-full h-full) */}
+      {/* Primary 80% Screen Estate 3D Mapbox Viewport */}
       <div
         className={`relative w-full ${
-          compactMode ? 'h-[420px]' : 'h-[72vh] min-h-[520px]'
+          compactMode ? 'h-[440px]' : 'h-[78vh] min-h-[560px]'
         } overflow-hidden bg-[#080A0F]`}
       >
-        {/* Canvas Mapbox nằm tuyệt đối tràn 100% khung hình */}
         <div
           ref={mapContainer}
           className={`absolute inset-0 w-full h-full ${
@@ -1096,7 +1098,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           }`}
         />
 
-        {/* Built-in 60FPS 3D Tactical Globe & Street Canvas (Active when no client token is needed) */}
         {useBuiltIn3DEngine && (
           <canvas
             ref={fallbackCanvasRef}
@@ -1114,48 +1115,17 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           />
         )}
 
-        {/* Các thẻ HUD nằm lớp trên z-index */}
+        {/* Clean Minimalist Map Overlays (Zero Debug Noise) */}
         <div className="absolute inset-0 pointer-events-none z-10">
-          {/* Top-Left Live 4-Stage Flight Progress & Global District Scan HUD Overlay */}
-          {flightStatus && (
-            <div className="absolute top-3 left-3 max-w-[92%] bg-[#080A0F]/95 border border-[#00E5FF] px-3 py-2 flex flex-col gap-1 pointer-events-none">
-              <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold">
-                <span
-                  className={`px-1.5 py-0.5 ${
-                    flightStatus.isRecording
-                      ? 'bg-[#00E676] text-[#080A0F]'
-                      : 'bg-[#00E5FF] text-[#080A0F]'
-                  }`}
-                >
-                  {flightStatus.isRecording
-                    ? `🔴 REC 60FPS · STAGE ${flightStatus.stageNumber}/4`
-                    : `STAGE ${flightStatus.stageNumber}/4`}
-                </span>
-                <span className="text-[#00E5FF] truncate">{flightStatus.label}</span>
-              </div>
-              <div className="text-[10px] font-bold text-[#00E5FF]">
-                {activeDistrictReadout}
-              </div>
-              {flightStatus.hudLockTag && (
-                <div className="text-[11px] font-extrabold text-[#00E676] tracking-wider">
-                  {flightStatus.hudLockTag}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Active Target HUD Tag [ 01 // POI ] <VENUE_NAME_UPPERCASE> */}
-          <div className="absolute bottom-3 left-3 bg-[#080A0F]/95 border border-[#00E5FF] px-3 py-1.5 flex flex-wrap items-center gap-2 text-[10px] font-mono-brand font-bold pointer-events-auto">
+          {/* Active Venue Pill (Bottom-Left) */}
+          <div className="absolute bottom-3 left-3 bg-[#080A0F]/95 border border-[#00E5FF] px-3 py-1.5 flex items-center gap-2 text-xs font-mono-brand font-bold pointer-events-auto">
             <MapPin className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
             <span className="text-[#00E5FF]">[ 01 // POI ]</span>
             <span className="text-[#FFFFFF]">{targetDisplayPoi.name.toUpperCase()}</span>
-            <span className="text-[#00E676]">
-              ({targetDisplayPoi.latitude.toFixed(4)}°N, {targetDisplayPoi.longitude.toFixed(4)}°E)
-            </span>
           </div>
 
-          {/* Interactive Pinned Food POIs Selector Strip on Bottom-Right */}
-          <div className="absolute bottom-3 right-3 hidden sm:flex flex-wrap items-center gap-1.5 pointer-events-auto max-w-[55%] justify-end">
+          {/* Interactive Pinned Food POIs Selector Strip (Bottom-Right) */}
+          <div className="absolute bottom-3 right-3 hidden sm:flex flex-wrap items-center gap-1.5 pointer-events-auto max-w-[58%] justify-end">
             {foodPois.slice(0, 4).map((poi, idx) => {
               const code = String(idx + 1).padStart(2, '0');
               const isSelected =
@@ -1181,22 +1151,22 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
                       if (matched) onSelectNode(matched);
                     }
                   }}
-                  className={`min-h-[30px] px-2 py-1 bg-[#080A0F]/95 border text-[10px] font-mono-brand font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
+                  className={`min-h-[30px] px-2.5 py-1 bg-[#080A0F]/95 border text-[11px] font-mono-brand font-bold flex items-center gap-1.5 cursor-pointer transition-colors ${
                     isSelected
                       ? 'border-[#00E676] text-[#00E676]'
-                      : 'border-[#1F1F2E] hover:border-[#00E5FF] text-[#00E5FF]'
+                      : 'border-[#1F1F2E] hover:border-[#00E5FF] text-[#F3F6F9]'
                   }`}
                 >
-                  <span>[ {code} // POI ]</span>
+                  <span className="text-[#00E5FF]">[{code}]</span>
                   <span className="text-[#FFFFFF] truncate max-w-[120px]">
-                    {poi.name.toUpperCase()}
+                    {poi.name}
                   </span>
                 </button>
               );
             })}
           </div>
 
-          {/* Top-Right Native Mapbox Camera Controls & 1-Click Cinematic Render Trigger */}
+          {/* Top-Right Camera & Cinematic Render Actions */}
           {mapReady && (
             <div className="absolute top-3 right-3 flex flex-wrap items-center gap-1.5 pointer-events-auto">
               <button
@@ -1219,46 +1189,36 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
                     });
                   }
                 }}
-                className="min-h-[34px] px-2.5 bg-[#080A0F] border border-[#1F1F2E] hover:border-[#00E5FF] text-[#00E5FF] text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                className="min-h-[34px] px-2.5 bg-[#080A0F]/95 border border-[#1F1F2E] hover:border-[#00E5FF] text-[#F3F6F9] text-[11px] font-bold flex items-center gap-1.5 cursor-pointer"
               >
-                <Compass className="w-3.5 h-3.5 shrink-0" />
-                <span>[ SPACE_ORBIT // Z:1.8 ]</span>
+                <Compass className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
+                <span>Orbit View</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => runCinematicSequence(false)}
-                className="min-h-[34px] px-2.5 bg-[#080A0F] border border-[#00E5FF] hover:bg-[#00E5FF] text-[#00E5FF] hover:text-[#080A0F] text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                className="min-h-[34px] px-2.5 bg-[#080A0F]/95 border border-[#00E5FF] hover:bg-[#00E5FF] text-[#00E5FF] hover:text-[#080A0F] text-[11px] font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
               >
                 <Rocket className="w-3.5 h-3.5 shrink-0" />
-                <span>[ 4-STAGE_FLIGHT ]</span>
+                <span>Flyover</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => runCinematicSequence(true)}
-                className="clip-button-chamfer min-h-[34px] px-3 bg-[#00E5FF] text-[#080A0F] text-[10px] font-bold flex items-center gap-1 cursor-pointer"
+                className="clip-button-chamfer min-h-[34px] px-3 bg-[#00E5FF] text-[#080A0F] text-[11px] font-bold flex items-center gap-1.5 cursor-pointer"
               >
                 <Film className="w-3.5 h-3.5 shrink-0" />
                 <span>
                   {flightStatus?.isRecording
-                    ? `[ 🔴 REC STAGE ${flightStatus.stageNumber}/4 ]`
-                    : '[ 🎬 1-CLICK CINEMATIC RENDER ]'}
+                    ? 'Recording 60FPS...'
+                    : 'Render 60FPS Video'}
                 </span>
               </button>
             </div>
           )}
         </div>
-      </div>
-
-      {/* Bottom Telemetry Strip with Final Lock HUD Tag & Global District Scan Readout */}
-      <div className="bg-[#0D1017] border-t border-[#1F1F2E] px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-[10px]">
-        <div className="flex flex-wrap items-center gap-2 text-[#00E5FF]">
-          <Crosshair className="w-3.5 h-3.5 text-[#00E676] shrink-0" />
-          <span className="font-bold text-[#00E676]">{lockReadoutTag}</span>
-          <span className="text-[#00E5FF] font-bold">{activeDistrictReadout}</span>
-        </div>
-        <div className="text-[#9BA8B8]">{currentHudReadout}</div>
       </div>
     </div>
   );

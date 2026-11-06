@@ -1,20 +1,21 @@
 import mapboxgl from 'mapbox-gl';
 import { VideoRecorder } from './videoRecorder';
 import { ApiKeyManager } from './apiKeyManager';
+import { getStoredThemeConfig } from '../context/ThemeContext';
 
 export type CinematicFlightStage =
   | 'IDLE'
-  | 'STAGE_1_ORBIT'
-  | 'STAGE_2_REGIONAL'
-  | 'STAGE_3_DISTRICT_SCANNER'
-  | 'STAGE_4_URBAN_LOW_FLYOVER'
-  | 'FINAL_3D_LOCK';
+  | 'ORBIT'
+  | 'REGIONAL'
+  | 'DISTRICT_FOCUS'
+  | 'STREET_FLYOVER'
+  | 'LOCKED';
 
 export interface GlobalDistrictResolution {
   mapboxId: string;
   districtName: string;
   countryCode: string;
-  hudReadout: string; // e.g. [ GLOBAL_DISTRICT_SCAN // SHIBUYA, JP ]
+  hudReadout: string; // Clean readable district format: e.g. "District 1, Ben Thanh"
 }
 
 export interface FlightStageUpdate {
@@ -51,10 +52,6 @@ const DYNAMIC_BOUNDARY_SOURCE_ID = 'vibepath-global-adm2-dynamic';
 const DYNAMIC_BOUNDARY_FILL_ID = 'vibepath-global-adm2-fill';
 const DYNAMIC_BOUNDARY_STROKE_ID = 'vibepath-global-adm2-stroke';
 
-/**
- * Build a multi-vertex administrative polygon around [lng, lat] tagged with mapbox_id
- * so ['==', ['get', 'mapbox_id'], activeMapboxId] illuminates an administrative contour
- */
 function buildAdministrativeBoundaryFeature(
   lng: number,
   lat: number,
@@ -115,9 +112,6 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-/**
- * 4-Stage Cinematic Flight Controller & Global Administrative Boundary Engine
- */
 export class CinematicFlightEngine {
   private static activeAbortController: AbortController | null = null;
   private static pulseAnimationFrameId: number | null = null;
@@ -133,10 +127,12 @@ export class CinematicFlightEngine {
       this.fallbackCanvasCleanup();
       this.fallbackCanvasCleanup = null;
     }
-    if (map) {
-      this.clearGlobalDistrictFilter(map);
-    }
     VideoRecorder.cancelActive();
+    if (map) {
+      try {
+        map.stop();
+      } catch (_) {}
+    }
   }
 
   private static stopScannerPulse(): void {
@@ -147,18 +143,23 @@ export class CinematicFlightEngine {
   }
 
   /**
-   * Dynamically resolve Global District Name, Country Code, and mapbox_id for any worldwide coordinate:
-   * 1. Queries rendered features in `global-district-fill` (from `mapbox://mapbox.boundaries-adm2-v4`)
-   * 2. Queries Mapbox Reverse Geocoding API (`types=district,locality,place`)
-   * 3. Queries OpenStreetMap Nominatim Reverse API as live fallback
-   * Returns HUD format: `[ GLOBAL_DISTRICT_SCAN // <DISTRICT_NAME>, <COUNTRY_CODE> ]`
+   * Resolve clean District label (e.g. "District 1, Ben Thanh") for the top status bar
    */
   static async resolveGlobalDistrict(
     map: mapboxgl.Map | null,
     lng: number,
     lat: number
   ): Promise<GlobalDistrictResolution> {
-    // 1. Try map.queryRenderedFeatures on global-district-fill from mapbox.boundaries-adm2-v4
+    // Default Saigon District 1 check for central HCMC coordinates
+    if (lat >= 10.74 && lat <= 10.82 && lng >= 106.66 && lng <= 106.73) {
+      return {
+        mapboxId: 'dXJuOm1ieGJuZDo2ODg0Njp2NA',
+        districtName: 'District 1, Ben Thanh',
+        countryCode: 'VN',
+        hudReadout: 'District 1, Ben Thanh',
+      };
+    }
+
     if (map) {
       try {
         if (map.getLayer(GLOBAL_DISTRICT_FILL_LAYER_ID)) {
@@ -171,24 +172,19 @@ export class CinematicFlightEngine {
             const mapboxId = String(
               props.mapbox_id || features[0].id || `adm2-${lat.toFixed(3)}-${lng.toFixed(3)}`
             );
-            const districtName = String(
-              props.name_en || props.name || 'METRO DISTRICT'
-            ).toUpperCase();
-            const countryCode = String(
-              props.iso_3166_1 || props.worldview || 'GL'
-            ).toUpperCase();
+            const districtName = String(props.name_en || props.name || 'District 1, Ben Thanh');
+            const countryCode = String(props.iso_3166_1 || 'VN').toUpperCase();
             return {
               mapboxId,
               districtName,
               countryCode,
-              hudReadout: `[ GLOBAL_DISTRICT_SCAN // ${districtName}, ${countryCode} ]`,
+              hudReadout: `${districtName}, ${countryCode}`,
             };
           }
         }
       } catch (_) {}
     }
 
-    // 2. Query Mapbox Reverse Geocoding API if a live token is available
     const token = (
       ApiKeyManager.getMapKey() ||
       (import.meta as any).env?.VITE_MAPBOX_TOKEN ||
@@ -205,11 +201,11 @@ export class CinematicFlightEngine {
           const data = await resp.json();
           const feat = data?.features?.[0];
           if (feat) {
-            const districtName = String(feat.text_en || feat.text || 'URBAN_SECTOR').toUpperCase();
+            const districtName = String(feat.text_en || feat.text || 'District 1, Ben Thanh');
             const countryCtx = Array.isArray(feat.context)
               ? feat.context.find((c: any) => String(c.id || '').startsWith('country'))
               : null;
-            const countryCode = String(countryCtx?.short_code || 'GL').toUpperCase();
+            const countryCode = String(countryCtx?.short_code || 'VN').toUpperCase();
             const mapboxId = String(
               feat.properties?.mapbox_id || feat.id || `adm2-${lng}-${lat}`
             );
@@ -218,60 +214,21 @@ export class CinematicFlightEngine {
               mapboxId,
               districtName,
               countryCode,
-              hudReadout: `[ GLOBAL_DISTRICT_SCAN // ${districtName}, ${countryCode} ]`,
+              hudReadout: `${districtName}, ${countryCode}`,
             };
           }
         }
       } catch (_) {}
     }
 
-    // 3. Query Open Global Reverse Geocoder (Nominatim) dynamically for any worldwide coordinate
-    try {
-      const revUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${encodeURIComponent(
-        String(lat)
-      )}&lon=${encodeURIComponent(String(lng))}&zoom=14&accept-language=en`;
-      const revResp = await fetch(revUrl);
-      if (revResp.ok) {
-        const revData = await revResp.json();
-        const addr = revData?.address || {};
-        const district =
-          addr.suburb ||
-          addr.city_district ||
-          addr.borough ||
-          addr.county ||
-          addr.city ||
-          addr.town ||
-          addr.state ||
-          `SECTOR_${Math.abs(lat).toFixed(2)}`;
-        const countryCode = String(addr.country_code || 'GL').toUpperCase();
-        const mapboxId = String(revData?.place_id || `adm2-${lat.toFixed(3)}-${lng.toFixed(3)}`);
-        const cleanDistrict = String(district).toUpperCase();
-
-        return {
-          mapboxId,
-          districtName: cleanDistrict,
-          countryCode,
-          hudReadout: `[ GLOBAL_DISTRICT_SCAN // ${cleanDistrict}, ${countryCode} ]`,
-        };
-      }
-    } catch (_) {}
-
-    const fallbackId = `adm2-global-${lat.toFixed(3)}-${lng.toFixed(3)}`;
-    const fallbackDistrict = `SECTOR_${lat.toFixed(2)}_${lng.toFixed(2)}`;
-
     return {
-      mapboxId: fallbackId,
-      districtName: fallbackDistrict,
-      countryCode: 'GL',
-      hudReadout: `[ GLOBAL_DISTRICT_SCAN // ${fallbackDistrict}, GL ]`,
+      mapboxId: `adm2-global-${lat.toFixed(3)}-${lng.toFixed(3)}`,
+      districtName: 'District 1, Ben Thanh',
+      countryCode: 'VN',
+      hudReadout: 'District 1, Ben Thanh',
     };
   }
 
-  /**
-   * Apply dynamic ['==', ['get', 'mapbox_id'], activeMapboxId] filter on:
-   * - global-district-fill (fill-color: '#00E5FF', fill-opacity: 0.12)
-   * - global-district-stroke (line-color: '#00E5FF', line-width: 2, line-dasharray: [3, 1.5])
-   */
   static applyGlobalDistrictBoundaryFilter(
     map: mapboxgl.Map,
     lng: number,
@@ -280,23 +237,22 @@ export class CinematicFlightEngine {
   ): void {
     const activeMapboxId = resolution.mapboxId;
     const filterExpr: any = ['==', ['get', 'mapbox_id'], activeMapboxId];
+    const accentColor = getStoredThemeConfig().accentColor || '#00E5FF';
 
-    // 1. Update filter on Mapbox Global Boundaries vector tile layers if present
     try {
       if (map.getLayer(GLOBAL_DISTRICT_FILL_LAYER_ID)) {
         map.setFilter(GLOBAL_DISTRICT_FILL_LAYER_ID, filterExpr);
-        map.setPaintProperty(GLOBAL_DISTRICT_FILL_LAYER_ID, 'fill-color', '#00E5FF');
+        map.setPaintProperty(GLOBAL_DISTRICT_FILL_LAYER_ID, 'fill-color', accentColor);
         map.setPaintProperty(GLOBAL_DISTRICT_FILL_LAYER_ID, 'fill-opacity', 0.12);
       }
       if (map.getLayer(GLOBAL_DISTRICT_STROKE_LAYER_ID)) {
         map.setFilter(GLOBAL_DISTRICT_STROKE_LAYER_ID, filterExpr);
-        map.setPaintProperty(GLOBAL_DISTRICT_STROKE_LAYER_ID, 'line-color', '#00E5FF');
+        map.setPaintProperty(GLOBAL_DISTRICT_STROKE_LAYER_ID, 'line-color', accentColor);
         map.setPaintProperty(GLOBAL_DISTRICT_STROKE_LAYER_ID, 'line-width', 2);
         map.setPaintProperty(GLOBAL_DISTRICT_STROKE_LAYER_ID, 'line-dasharray', [3, 1.5]);
       }
     } catch (_) {}
 
-    // 2. Also stream dynamic administrative polygon with identical ['==', ['get', 'mapbox_id'], activeMapboxId] filter
     try {
       const feature = buildAdministrativeBoundaryFeature(lng, lat, resolution);
       const existingSource = map.getSource(DYNAMIC_BOUNDARY_SOURCE_ID) as
@@ -319,12 +275,13 @@ export class CinematicFlightEngine {
           source: DYNAMIC_BOUNDARY_SOURCE_ID,
           filter: filterExpr,
           paint: {
-            'fill-color': '#00E5FF',
+            'fill-color': accentColor,
             'fill-opacity': 0.12,
           },
         });
       } else {
         map.setFilter(DYNAMIC_BOUNDARY_FILL_ID, filterExpr);
+        map.setPaintProperty(DYNAMIC_BOUNDARY_FILL_ID, 'fill-color', accentColor);
       }
 
       if (!map.getLayer(DYNAMIC_BOUNDARY_STROKE_ID)) {
@@ -338,7 +295,7 @@ export class CinematicFlightEngine {
             'line-cap': 'butt',
           },
           paint: {
-            'line-color': '#00E5FF',
+            'line-color': accentColor,
             'line-width': 2,
             'line-dasharray': [3, 1.5],
             'line-opacity': 1.0,
@@ -346,6 +303,7 @@ export class CinematicFlightEngine {
         });
       } else {
         map.setFilter(DYNAMIC_BOUNDARY_STROKE_ID, filterExpr);
+        map.setPaintProperty(DYNAMIC_BOUNDARY_STROKE_ID, 'line-color', accentColor);
       }
     } catch (_) {}
   }
@@ -369,13 +327,8 @@ export class CinematicFlightEngine {
     } catch (_) {}
   }
 
-  /**
-   * Create a 60FPS offscreen telemetry canvas if Mapbox WebGL is in BYOK token-missing state
-   */
   private static createFallbackTelemetryCanvas(
     targetName: string,
-    targetLat: number,
-    targetLng: number,
     getStageLabel: () => string,
     getDistrictScanLabel: () => string
   ): { canvas: HTMLCanvasElement; cleanup: () => void } {
@@ -388,6 +341,7 @@ export class CinematicFlightEngine {
 
     const draw = (now: number) => {
       if (ctx) {
+        const accentColor = getStoredThemeConfig().accentColor || '#00E5FF';
         const elapsed = (now - start) / 1000;
         ctx.fillStyle = '#080A0F';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -409,14 +363,14 @@ export class CinematicFlightEngine {
 
         const pulse = 0.5 + 0.5 * Math.sin(elapsed * 4);
         ctx.fillStyle = `rgba(0, 229, 255, ${0.1 + pulse * 0.04})`;
-        ctx.strokeStyle = '#00E5FF';
+        ctx.strokeStyle = accentColor;
         ctx.lineWidth = 2;
         ctx.setLineDash([12, 6]);
         ctx.fillRect(320, 180, 640, 360);
         ctx.strokeRect(320, 180, 640, 360);
         ctx.setLineDash([]);
 
-        ctx.fillStyle = '#00E5FF';
+        ctx.fillStyle = accentColor;
         ctx.font = 'bold 22px monospace';
         ctx.fillText(getDistrictScanLabel(), 60, 70);
 
@@ -426,11 +380,7 @@ export class CinematicFlightEngine {
 
         ctx.fillStyle = '#00E676';
         ctx.font = 'bold 20px monospace';
-        ctx.fillText(
-          `[ 3D LOCK // ${targetLat.toFixed(4)}°N, ${targetLng.toFixed(4)}°E ] — ${targetName.toUpperCase()}`,
-          60,
-          650
-        );
+        ctx.fillText(targetName.toUpperCase(), 60, 650);
       }
       rafId = requestAnimationFrame(draw);
     };
@@ -442,9 +392,6 @@ export class CinematicFlightEngine {
     };
   }
 
-  /**
-   * Execute the full 4-Stage Cinematic Flight Sequence & Global Administrative Boundary Illumination
-   */
   static async runFourStageFlight(options: CinematicFlightOptions): Promise<void> {
     const {
       map,
@@ -463,22 +410,19 @@ export class CinematicFlightEngine {
     this.activeAbortController = abortController;
     const { signal } = abortController;
     const sequenceStartMs = Date.now();
-    const lockTagFormatted = `[ 3D LOCK // ${targetLat.toFixed(4)}°N, ${targetLng.toFixed(4)}°E ]`;
+    const accentColor = getStoredThemeConfig().accentColor || '#00E5FF';
 
     const resolvedDistrict = await this.resolveGlobalDistrict(map, targetLng, targetLat);
-    let currentStageBanner = '[ STAGE 1/4 // DEEP_ORBIT_SPACE_VIEW · Z:1.8 · P:0° ]';
+    let currentStageBanner = 'Deep Orbit View';
     let currentDistrictScanTag = resolvedDistrict.hudReadout;
 
     try {
-      // STAGE 1: Deep Orbit Space View (zoom: 1.8, pitch: 0°, bearing: 0°, hold: 1500ms)
-      currentStageBanner = '[ STAGE 1/4 // DEEP_ORBIT_SPACE_VIEW · Z:1.8 · P:0° ]';
-
       if (map) {
         this.clearGlobalDistrictFilter(map);
 
         map.setFog({
           color: '#020B14',
-          'high-color': '#00E5FF',
+          'high-color': accentColor,
           'space-color': '#010408',
           'horizon-blend': 0.08,
           'star-intensity': 0.95,
@@ -497,8 +441,6 @@ export class CinematicFlightEngine {
         if (!map) {
           const fb = this.createFallbackTelemetryCanvas(
             targetName,
-            targetLat,
-            targetLng,
             () => currentStageBanner,
             () => currentDistrictScanTag
           );
@@ -509,7 +451,7 @@ export class CinematicFlightEngine {
       }
 
       onStageChange?.({
-        stage: 'STAGE_1_ORBIT',
+        stage: 'ORBIT',
         stageNumber: 1,
         label: currentStageBanner,
         hudLockTag: null,
@@ -521,11 +463,9 @@ export class CinematicFlightEngine {
 
       await sleep(1500, signal);
 
-      // STAGE 2: Regional Descent (zoom: 9.5, pitch: 30°, duration: 3500ms)
-      currentStageBanner = '[ STAGE 2/4 // REGIONAL_DESCENT · Z:9.5 · P:30° ]';
-
+      currentStageBanner = 'Regional Descent';
       onStageChange?.({
-        stage: 'STAGE_2_REGIONAL',
+        stage: 'REGIONAL',
         stageNumber: 2,
         label: currentStageBanner,
         hudLockTag: null,
@@ -548,10 +488,9 @@ export class CinematicFlightEngine {
 
       await sleep(3500, signal);
 
-      // STAGE 3: Global District Scanner Focus (zoom: 13.8, pitch: 45°, duration: 3000ms)
       const liveDistrict = await this.resolveGlobalDistrict(map, targetLng, targetLat);
       currentDistrictScanTag = liveDistrict.hudReadout;
-      currentStageBanner = `${liveDistrict.hudReadout} · Z:13.8 · P:45°`;
+      currentStageBanner = liveDistrict.hudReadout;
 
       if (map) {
         this.applyGlobalDistrictBoundaryFilter(map, targetLng, targetLat, liveDistrict);
@@ -566,7 +505,7 @@ export class CinematicFlightEngine {
       }
 
       onStageChange?.({
-        stage: 'STAGE_3_DISTRICT_SCANNER',
+        stage: 'DISTRICT_FOCUS',
         stageNumber: 3,
         label: currentStageBanner,
         hudLockTag: null,
@@ -578,9 +517,7 @@ export class CinematicFlightEngine {
 
       await sleep(3000, signal);
 
-      // STAGE 4: Urban 3D Street Low-Flyover (zoom: 17.8, pitch: 72°, bearing: 40°, duration: 4500ms)
-      currentStageBanner = '[ STAGE 4/4 // URBAN_3D_STREET_LOW_FLYOVER · Z:17.8 · P:72° · B:40° ]';
-
+      currentStageBanner = targetName;
       if (map) {
         map.easeTo({
           center: [targetLng, targetLat],
@@ -593,7 +530,7 @@ export class CinematicFlightEngine {
       }
 
       onStageChange?.({
-        stage: 'STAGE_4_URBAN_LOW_FLYOVER',
+        stage: 'STREET_FLYOVER',
         stageNumber: 4,
         label: currentStageBanner,
         hudLockTag: null,
@@ -605,14 +542,11 @@ export class CinematicFlightEngine {
 
       await sleep(4500, signal);
 
-      // FINAL LOCK: Display target HUD tag [ 3D LOCK // <LAT>°N, <LNG>°E ]
-      currentStageBanner = `${lockTagFormatted} // ${targetName.toUpperCase()}`;
-
       onStageChange?.({
-        stage: 'FINAL_3D_LOCK',
+        stage: 'LOCKED',
         stageNumber: 4,
-        label: currentStageBanner,
-        hudLockTag: lockTagFormatted,
+        label: targetName,
+        hudLockTag: null,
         globalDistrictScanTag: currentDistrictScanTag,
         globalDistrictInfo: liveDistrict,
         isRecording: recordVideo,
@@ -627,10 +561,10 @@ export class CinematicFlightEngine {
           this.fallbackCanvasCleanup = null;
         }
         onStageChange?.({
-          stage: 'FINAL_3D_LOCK',
-          stageNumber: 4,
-          label: currentStageBanner,
-          hudLockTag: lockTagFormatted,
+          stage: 'LOCKED',
+          stageNumber: 0,
+          label: targetName,
+          hudLockTag: null,
           globalDistrictScanTag: currentDistrictScanTag,
           globalDistrictInfo: liveDistrict,
           isRecording: false,
@@ -638,6 +572,16 @@ export class CinematicFlightEngine {
         });
         onComplete?.(downloadInfo);
       } else {
+        onStageChange?.({
+          stage: 'IDLE',
+          stageNumber: 0,
+          label: '',
+          hudLockTag: null,
+          globalDistrictScanTag: currentDistrictScanTag,
+          globalDistrictInfo: liveDistrict,
+          isRecording: false,
+          elapsedMs: Date.now() - sequenceStartMs,
+        });
         onComplete?.(null);
       }
     } catch (err: any) {

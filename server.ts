@@ -122,6 +122,8 @@ app.post("/api/vibepath/sync", (req, res) => {
       byokDifyAttached: Boolean(body.custom_dify_key),
       sanitizedPayload: {
         ...sanitizedRenderPayload,
+        accent_color: body.accent_color || "#F4511E",
+        font_family: body.font_family || "Plus Jakarta Sans",
         ...(body.custom_dify_key ? { custom_dify_key: body.custom_dify_key } : {}),
       },
     });

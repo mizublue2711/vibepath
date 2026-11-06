@@ -29,6 +29,8 @@ export interface RenderPayload {
   language: 'vi' | 'en';
   trip_name: string;
   created_at: string;
+  accent_color?: string;
+  font_family?: string;
   telemetry_data: TelemetryPoint[];
   food_pois: FoodPOI[];
 }
@@ -116,6 +118,8 @@ export class SchemaValidator {
       language: validLanguage,
       trip_name: String(input.trip_name || 'Chuyến đi không tên').trim(),
       created_at: String(input.created_at || new Date().toISOString()),
+      accent_color: String(input.accent_color || '#00E5FF').trim(),
+      font_family: String(input.font_family || 'JetBrains Mono').trim(),
       telemetry_data: cleanTelemetry,
       food_pois: cleanPois,
     };

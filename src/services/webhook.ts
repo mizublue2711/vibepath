@@ -6,11 +6,14 @@
 import { ApiKeyManager } from './apiKeyManager';
 import { SchemaValidator, RenderPayload, FeedbackPayload } from '../utils/schema-validator';
 import { CloudSyncReceipt } from '../data/vibePathData';
+import { getStoredThemeConfig } from '../context/ThemeContext';
 
 export const N8N_DIFY_HEADER_EXPRESSION =
   "={{ $json.body.custom_dify_key ? 'Bearer ' + $json.body.custom_dify_key : 'Bearer app-xxxxxxxxxxxxxxxxxxxx' }}";
 
 export interface SyncWebhookPayload extends RenderPayload {
+  accent_color: string;
+  font_family: string;
   custom_dify_key?: string;
 }
 
@@ -19,14 +22,22 @@ export interface FeedbackWebhookPayload extends FeedbackPayload {
 }
 
 /**
- * Chuẩn bị Payload gửi đi (Đính kèm custom_dify_key nếu người dùng đã cài đặt trong localStorage)
+ * Chuẩn bị Payload gửi đi (Đính kèm accent_color, font_family và custom_dify_key nếu có)
  */
 export function buildWebhookRenderPayload(rawOrSanitized: any): SyncWebhookPayload {
-  const sanitized = SchemaValidator.sanitizeRenderPayload(rawOrSanitized);
+  const theme = getStoredThemeConfig();
+  const enrichedInput = {
+    ...rawOrSanitized,
+    accent_color: rawOrSanitized?.accent_color || theme.accentColor || '#00E5FF',
+    font_family: rawOrSanitized?.font_family || theme.fontFamily || 'JetBrains Mono',
+  };
+  const sanitized = SchemaValidator.sanitizeRenderPayload(enrichedInput);
   const customDifyKey = ApiKeyManager.getDifyKey();
 
   return {
     ...sanitized,
+    accent_color: sanitized.accent_color || theme.accentColor || '#00E5FF',
+    font_family: sanitized.font_family || theme.fontFamily || 'JetBrains Mono',
     ...(customDifyKey ? { custom_dify_key: customDifyKey } : {}),
   };
 }

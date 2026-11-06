@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiKeyManager } from '../services/apiKeyManager';
 import { parseLocationInput } from '../utils/linkParser';
 import { LanguageCode } from '../data/vibePathData';
-import { Search, Crosshair, CornerDownLeft, X, Link2, Sparkles, Loader2 } from 'lucide-react';
+import { Search, Crosshair, CornerDownLeft, X, Link2, Loader2 } from 'lucide-react';
 
 export interface SearchResult {
   id: string;
@@ -24,9 +24,6 @@ export interface PoiSearchBoxProps {
   compact?: boolean;
 }
 
-/**
- * Parse Mapbox Search Box API v6 suggestions / features into clean SearchResult items
- */
 export function parseMapboxSearchBox(suggestions: any[]): SearchResult[] {
   return suggestions
     .slice(0, 8)
@@ -51,7 +48,7 @@ export function parseMapboxSearchBox(suggestions: any[]): SearchResult[] {
           item.text_vi ||
           item.text ||
           String(item.place_name || '').split(',')[0] ||
-          'POI_VENUE'
+          'Culinary Venue'
       ).trim();
 
       const address = String(
@@ -76,9 +73,6 @@ export function parseMapboxSearchBox(suggestions: any[]): SearchResult[] {
     .filter((item) => Number.isFinite(item.longitude) && Number.isFinite(item.latitude));
 }
 
-/**
- * Parse Mapbox Geocoding v5 features into clean SearchResult items
- */
 export function parseMapboxGeocoding(features: any[]): SearchResult[] {
   return features
     .slice(0, 8)
@@ -92,7 +86,7 @@ export function parseMapboxGeocoding(features: any[]): SearchResult[] {
           feature.text ||
           feature.properties?.name ||
           String(feature.place_name || '').split(',')[0] ||
-          'POI_VENUE'
+          'Culinary Venue'
       ).trim();
 
       const address = String(
@@ -116,10 +110,6 @@ export function parseMapboxGeocoding(features: any[]): SearchResult[] {
     .filter((item) => Number.isFinite(item.longitude) && Number.isFinite(item.latitude));
 }
 
-/**
- * Unified 100% Mapbox Search Engine (Search Box API v6 with Geocoding v5 fallback)
- * Relies strictly on VITE_MAPBOX_TOKEN.
- */
 export async function searchLocationsMapbox(
   query: string,
   mapCenterLngLat?: [number, number]
@@ -127,10 +117,8 @@ export async function searchLocationsMapbox(
   const token = ApiKeyManager.getMapKey() || import.meta.env.VITE_MAPBOX_TOKEN;
   if (!query.trim()) return [];
 
-  // When a valid client VITE_MAPBOX_TOKEN is available, query Mapbox Search Box API v6 directly
   if (token && token.trim().startsWith('pk.') && !token.includes('xxxxxxxx')) {
     try {
-      // Proximity bias: prioritize nearby locations if map center is available
       const proximity =
         mapCenterLngLat &&
         Number.isFinite(mapCenterLngLat[0]) &&
@@ -138,14 +126,12 @@ export async function searchLocationsMapbox(
           ? `&proximity=${mapCenterLngLat[0]},${mapCenterLngLat[1]}`
           : '';
 
-      // Mapbox Search Box API endpoint with POI & address types
       const endpoint = `https://api.mapbox.com/search/searchbox/v1/forward?q=${encodeURIComponent(
         query
       )}&access_token=${token}&types=poi,address&category=food_and_drink,restaurant,cafe,bar&language=vi&limit=8${proximity}`;
 
       const res = await fetch(endpoint);
       if (!res.ok) {
-        // Fallback to Mapbox Geocoding v5 if Search Box v6 feature flag is disabled
         const fallbackEndpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
           query
         )}.json?access_token=${token}&types=poi,address&language=vi&limit=8${proximity}`;
@@ -160,7 +146,6 @@ export async function searchLocationsMapbox(
         return parseMapboxSearchBox(rawItems);
       }
 
-      // Secondary Mapbox Geocoding v5 check when category filter returns 0 items for general landmarks
       const fallbackEndpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
         query
       )}.json?access_token=${token}&types=poi,address&language=vi&limit=8${proximity}`;
@@ -177,7 +162,6 @@ export async function searchLocationsMapbox(
     }
   }
 
-  // Server-side Mapbox Search proxy using server VITE_MAPBOX_TOKEN
   try {
     const serverRes = await fetch(`/api/poi-search?q=${encodeURIComponent(query)}`);
     if (serverRes.ok) {
@@ -210,27 +194,17 @@ export async function searchLocationsMapbox(
   return [];
 }
 
-/**
- * Unified 100% Mapbox POI Search Component (src/components/PoiSearchBox.tsx)
- * - Uses Mapbox Search Box API v6 & Mapbox Geocoding v5 via single VITE_MAPBOX_TOKEN
- * - Swiss Brutalism UI: border-radius: 0px !important, Background #0D1017, Border 1px solid #00E5FF
- * - Display item header format: [ 01 // POI ] <VENUE_NAME_UPPERCASE>
- */
 export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
   onSelectLocation,
   mapCenterLngLat,
   language = 'vi',
   placeholder,
-  compact = false,
 }) => {
   const [query, setQuery] = useState<string>('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeIndex, setActiveIndex] = useState<number>(0);
-  const [statusBadge, setStatusBadge] = useState<string>(
-    '[ MAPBOX_SEARCH_V6 // READY ]'
-  );
 
   const containerRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<number | null>(null);
@@ -254,11 +228,9 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
       if (!trimmed) {
         setResults([]);
         setIsOpen(false);
-        setStatusBadge('[ MAPBOX_SEARCH_V6 // READY ]');
         return;
       }
 
-      // Check if input is a coordinate pair or pasted location URL
       const parsedLink = parseLocationInput(trimmed);
       if (
         parsedLink.matched &&
@@ -272,7 +244,7 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
           id: `mapbox-coord-${lat}-${lng}`,
           name:
             parsedLink.extractedName ||
-            `POI_${lat.toFixed(4)}N_${lng.toFixed(4)}E`,
+            `Pinned Venue (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`,
           address: addr,
           fullAddress: addr,
           coordinates: [lng, lat],
@@ -281,23 +253,20 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
         };
         setResults([linkResult]);
         setActiveIndex(0);
-        setStatusBadge(`[ COORDS_LOCKED // ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E ]`);
         setIsOpen(true);
         return;
       }
 
       const effectiveQuery = parsedLink.fallbackQuery || trimmed;
       setIsLoading(true);
-      setStatusBadge('[ MAPBOX_SEARCH_V6 // QUERYING... ]');
 
       try {
         const items = await searchLocationsMapbox(effectiveQuery, mapCenterLngLat);
         setResults(items);
         setActiveIndex(0);
-        setStatusBadge(`[ MAPBOX_SEARCH_V6 // ${items.length} POIS ]`);
         setIsOpen(items.length > 0);
       } catch (_) {
-        setStatusBadge('[ MAPBOX_SEARCH_V6 // STANDBY ]');
+        setResults([]);
       } finally {
         setIsLoading(false);
       }
@@ -317,7 +286,6 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
       setResults([]);
       setIsOpen(false);
       setIsLoading(false);
-      setStatusBadge('[ MAPBOX_SEARCH_V6 // READY ]');
       return;
     }
 
@@ -329,9 +297,6 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
   const handleSelectResult = (item: SearchResult) => {
     setQuery(item.name);
     setIsOpen(false);
-    setStatusBadge(
-      `[ POI_LOCKED // ${item.coordinates[1].toFixed(4)}°N, ${item.coordinates[0].toFixed(4)}°E ]`
-    );
     onSelectLocation(item);
   };
 
@@ -361,34 +326,15 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="relative w-full max-w-full select-none"
-      style={{ borderRadius: '0px' }}
-    >
-      {/* Top Brutalist Telemetry Header */}
-      {!compact && (
-        <div className="flex flex-wrap items-center justify-between gap-1 mb-1.5 text-[10px] font-mono-brand">
-          <span className="text-[#00E5FF] font-bold flex items-center gap-1">
-            <Sparkles className="w-3 h-3 shrink-0" />
-            <span>[ MAPBOX SEARCH BOX API v6 // VITE_MAPBOX_TOKEN ]</span>
-          </span>
-          <span className="text-[#00E676] truncate">{statusBadge}</span>
-        </div>
-      )}
-
-      {/* Search Input Row (Zero Soft Radius Geometry: border-radius: 0px !important) */}
-      <div
-        className="flex items-stretch w-full bg-[#080A0F] border border-[#1F1F2E] focus-within:border-[#00E5FF] transition-colors"
-        style={{ borderRadius: '0px' }}
-      >
-        <div className="px-3 flex items-center justify-center text-[#00E5FF] border-r border-[#1F1F2E] bg-[#0D1017] shrink-0">
+    <div ref={containerRef} className="relative w-full max-w-full select-none">
+      <div className="flex items-stretch w-full bg-[#090D11]/90 border border-slate-800/70 rounded-lg focus-within:border-[var(--accent-color)] transition-colors overflow-hidden">
+        <div className="px-3 flex items-center justify-center border-r border-slate-800/70 bg-[#121820]/80 shrink-0">
           {isLoading ? (
-            <Loader2 className="w-4 h-4 text-[#00E5FF] animate-spin" />
+            <Loader2 className="w-4 h-4 text-[var(--accent-color)] animate-spin" />
           ) : query.includes('http') || query.includes('@') ? (
             <Link2 className="w-4 h-4 text-[#00E676]" />
           ) : (
-            <Search className="w-4 h-4 text-[#00E5FF]" />
+            <Search className="w-4 h-4 text-slate-400" />
           )}
         </div>
 
@@ -405,12 +351,11 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
           placeholder={
             placeholder ||
             (language === 'vi'
-              ? 'Tìm quán ăn, địa chỉ, địa danh qua Mapbox API (VD: "Phở Bò Phú Gia", "Highlands Coffee")...'
-              : 'Search food venues, street addresses, or landmarks via Mapbox API (e.g. "Phở Bò Phú Gia", "Highlands Coffee")...')
+              ? 'Tìm quán ăn, địa chỉ đường phố (VD: Phở Bò Phú Gia, Highlands Coffee)...'
+              : 'Search restaurants, street addresses, or landmarks (e.g., Phở Bò Phú Gia)...')
           }
-          aria-label="Mapbox POI Search"
-          className="flex-1 min-w-0 min-h-[42px] px-3 bg-[#080A0F] text-[#FFFFFF] text-xs font-mono-brand placeholder:text-[#9BA8B8]/70 focus:outline-none"
-          style={{ borderRadius: '0px' }}
+          aria-label="Search POI Locations"
+          className="flex-1 min-w-0 min-h-[42px] px-3 bg-transparent text-[#F8FAFC] text-xs font-medium placeholder:text-slate-400 focus:outline-none"
         />
 
         {query && (
@@ -421,9 +366,8 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
               setResults([]);
               setIsOpen(false);
             }}
-            className="px-2.5 bg-[#080A0F] text-[#9BA8B8] hover:text-[#FFFFFF] flex items-center justify-center cursor-pointer"
+            className="px-2.5 text-slate-400 hover:text-white flex items-center justify-center cursor-pointer"
             title="Clear search"
-            style={{ borderRadius: '0px' }}
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -438,25 +382,21 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
               executeMapboxSearch(query);
             }
           }}
-          className="px-3 bg-[#0D1017] hover:bg-[#00E5FF] text-[#00E5FF] hover:text-[#080A0F] border-l border-[#1F1F2E] text-[10px] font-mono-brand font-bold flex items-center gap-1 cursor-pointer transition-colors shrink-0"
-          style={{ borderRadius: '0px' }}
+          style={{ backgroundColor: 'var(--accent-color)' }}
+          className="px-3.5 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer hover:brightness-110 transition-all shrink-0"
         >
           <CornerDownLeft className="w-3.5 h-3.5 shrink-0" />
           <span className="hidden sm:inline">
-            {isLoading ? '[ SCANNING... ]' : '[ MAPBOX_SEARCH ]'}
+            {isLoading ? (language === 'vi' ? 'Đang tìm...' : 'Searching...') : language === 'vi' ? 'Tìm địa điểm' : 'Search'}
           </span>
         </button>
       </div>
 
-      {/* Swiss Brutalism Dropdown:
-          border-radius: 0px !important, Background: #0D1017, Border: 1px solid #00E5FF
-          Display item header format: [ 01 // POI ] <VENUE_NAME_UPPERCASE> */}
       {isOpen && results.length > 0 && (
         <div
           role="listbox"
-          aria-label="Mapbox Search Results"
-          className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#0D1017] border border-[#00E5FF] shadow-2xl divide-y divide-[#1F1F2E] max-h-[320px] overflow-y-auto"
-          style={{ borderRadius: '0px' }}
+          aria-label="Location Search Results"
+          className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-[#121820]/95 backdrop-blur-md border border-slate-700/80 rounded-lg shadow-2xl divide-y divide-slate-800/60 max-h-[320px] overflow-y-auto"
         >
           {results.slice(0, 8).map((item, idx) => {
             const indexLabel = String(idx + 1).padStart(2, '0');
@@ -471,35 +411,30 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
                 onClick={() => handleSelectResult(item)}
                 onMouseEnter={() => setActiveIndex(idx)}
                 className={`w-full px-3.5 py-2.5 text-left flex items-start justify-between gap-3 cursor-pointer transition-colors ${
-                  isHighlighted
-                    ? 'bg-[#080A0F] border-l-2 border-[#00E5FF]'
-                    : 'bg-[#0D1017] hover:bg-[#080A0F]'
+                  isHighlighted ? 'bg-slate-800/70' : 'hover:bg-slate-800/40'
                 }`}
-                style={{ borderRadius: '0px' }}
               >
                 <div className="min-w-0 flex-1">
-                  {/* Required Header Format: [ 01 // POI ] <VENUE_NAME_UPPERCASE> */}
-                  <div className="font-mono-brand text-xs font-bold text-[#FFFFFF] flex items-center gap-1.5 break-words">
-                    <span className="text-[#00E5FF] shrink-0">
-                      [ {indexLabel} // POI ]
+                  <div className="text-xs font-semibold text-slate-100 flex items-center gap-2 break-words">
+                    <span
+                      style={{ color: 'var(--accent-color)' }}
+                      className="font-telemetry text-[11px] font-bold shrink-0"
+                    >
+                      {indexLabel}.
                     </span>
-                    <span className="truncate">{item.name.toUpperCase()}</span>
+                    <span className="truncate">{item.name}</span>
                   </div>
-                  {/* Subtitle: Full street address or district */}
-                  <div className="text-[11px] font-mono-brand text-[#9BA8B8] truncate mt-0.5">
+                  <div className="text-[11px] text-slate-400 truncate mt-0.5">
                     {item.address}
                   </div>
                 </div>
 
-                <div className="shrink-0 text-right font-mono-brand">
-                  <div className="text-[10px] text-[#00E676] font-bold flex items-center justify-end gap-1">
-                    <Crosshair className="w-3 h-3 text-[#00E5FF] shrink-0" />
+                <div className="shrink-0 text-right font-telemetry tabular-nums">
+                  <div className="text-[11px] text-[#00E676] font-semibold flex items-center justify-end gap-1">
+                    <Crosshair className="w-3 h-3 text-[#00E676] shrink-0" />
                     <span>
                       {lat.toFixed(4)}°N, {lng.toFixed(4)}°E
                     </span>
-                  </div>
-                  <div className="text-[9px] text-[#00E5FF] uppercase mt-0.5">
-                    [ MAPBOX_V6 ]
                   </div>
                 </div>
               </button>
