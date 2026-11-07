@@ -28,6 +28,7 @@ import { FeedbackTab } from './components/FeedbackTab';
 import { BottomNav } from './components/BottomNav';
 import { SettingsModal } from './components/SettingsModal';
 import { SwissBrutalistHUD } from './components/SwissBrutalistHUD';
+import { OnboardingModal } from './components/OnboardingModal';
 import { ApiKeyManager, KeyConnectionStatus } from './services/apiKeyManager';
 import { sendRenderPayload } from './services/webhook';
 import {
@@ -57,6 +58,34 @@ function AppContent() {
     ApiKeyManager.getStatus()
   );
   const [districtLabel, setDistrictLabel] = useState<string>('District 1, Ben Thanh');
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
+
+  // First-Visit Auto-Trigger: check localStorage on mount
+  useEffect(() => {
+    try {
+      const visited = localStorage.getItem('vibepath_visited');
+      if (visited !== 'true') {
+        setIsOnboardingOpen(true);
+      }
+    } catch (_) {
+      // In case localStorage is restricted
+    }
+  }, []);
+
+  const handleCloseOnboarding = useCallback(() => {
+    try {
+      localStorage.setItem('vibepath_visited', 'true');
+    } catch (_) {}
+    setIsOnboardingOpen(false);
+  }, []);
+
+  const handleTryNowOnboarding = useCallback(() => {
+    try {
+      localStorage.setItem('vibepath_visited', 'true');
+    } catch (_) {}
+    setIsOnboardingOpen(false);
+    setActiveTab('vlogger');
+  }, []);
 
   useEffect(() => {
     const onKeysUpdated = () => {
@@ -328,6 +357,7 @@ function AppContent() {
         isQuickSettingsOpen={showQuickSettingsDrawer}
         accuracyM={telemetry.accuracyM}
         districtLabel={districtLabel}
+        onOpenGuide={() => setIsOnboardingOpen(true)}
         onTriggerCinematicRender={() => {
           if (activeTab !== 'vlogger') {
             setActiveTab('vlogger');
@@ -600,6 +630,13 @@ function AppContent() {
           setSyncToast(`Saved BYOK Configuration (${updated.activeMapMode})`);
           setTimeout(() => setSyncToast(null), 3200);
         }}
+      />
+
+      {/* First-Visit Auto-Trigger & Persistent Guide Modal */}
+      <OnboardingModal
+        isOpen={isOnboardingOpen}
+        onClose={handleCloseOnboarding}
+        onTryNow={handleTryNowOnboarding}
       />
     </div>
   );

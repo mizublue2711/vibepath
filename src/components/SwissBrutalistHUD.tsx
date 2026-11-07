@@ -3,7 +3,6 @@ import { FlightStageUpdate } from '../services/cinematicFlightEngine';
 import { SubsystemTab } from '../data/vibePathData';
 import { useTranslation, LanguageCode } from '../context/LanguageContext';
 import { CloudUpload, Film, Sliders, MapPin, Bug, HelpCircle } from 'lucide-react';
-import { OnboardingModal } from './OnboardingModal';
 
 export interface NavigationProps {
   tripName: string;
@@ -48,7 +47,6 @@ export const SwissBrutalistHUD: React.FC<NavigationProps> = ({
 
   const [flightStatus, setFlightStatus] = useState<FlightStageUpdate | null>(null);
   const [lastExportFile, setLastExportFile] = useState<string | null>(null);
-  const [isGuideOpen, setIsGuideOpen] = useState<boolean>(false);
 
   useEffect(() => {
     const handleStageEvent = (e: Event) => {
@@ -219,13 +217,7 @@ export const SwissBrutalistHUD: React.FC<NavigationProps> = ({
           {/* Persistent Guide Button */}
           <button
             type="button"
-            onClick={() => {
-              if (onOpenGuide) {
-                onOpenGuide();
-              } else {
-                setIsGuideOpen(true);
-              }
-            }}
+            onClick={() => onOpenGuide?.()}
             className="min-h-[34px] px-3 bg-[#0D0E17] border border-[#1F1F2E] hover:border-[#00E5FF] text-[#8A8FA3] hover:text-[#00E5FF] font-mono text-xs uppercase tracking-wider font-bold flex items-center gap-1.5 cursor-pointer transition-all rounded-none"
             title={t('onboarding.title')}
           >
@@ -281,15 +273,6 @@ export const SwissBrutalistHUD: React.FC<NavigationProps> = ({
           </button>
         </div>
       </div>
-      {/* Onboarding Guide Modal */}
-      <OnboardingModal
-        isOpen={isGuideOpen}
-        onClose={() => setIsGuideOpen(false)}
-        onTryNow={() => {
-          setIsGuideOpen(false);
-          onChangeTab?.('vlogger');
-        }}
-      />
     </header>
   );
 };
