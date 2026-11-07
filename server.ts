@@ -33,16 +33,30 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "VibePath Kinetic Engine", timestamp: new Date().toISOString() });
 });
 
-// Mapbox Search Route (/api/poi-search) — 100% Mapbox Search Box API v6 & Geocoding v5 using VITE_MAPBOX_TOKEN
+// Mapbox Search Route (/api/poi-search) — Mapbox Geocoding & Search Box with types=poi,address,place,locality,district
 app.get("/api/poi-search", async (req, res) => {
   try {
     const query = String(req.query.q || "").trim();
     if (!query) {
       return res.json([]);
     }
-    const results = await searchFoodPoisServerSide(query, {
-      VITE_MAPBOX_TOKEN: process.env.VITE_MAPBOX_TOKEN,
-    });
+    const proxParam = String(req.query.proximity || "").trim();
+    let proximityLngLat: [number, number] | undefined;
+    if (proxParam.includes(",")) {
+      const [lngStr, latStr] = proxParam.split(",");
+      const lng = Number(lngStr);
+      const lat = Number(latStr);
+      if (Number.isFinite(lng) && Number.isFinite(lat)) {
+        proximityLngLat = [lng, lat];
+      }
+    }
+    const results = await searchFoodPoisServerSide(
+      query,
+      {
+        VITE_MAPBOX_TOKEN: process.env.VITE_MAPBOX_TOKEN,
+      },
+      proximityLngLat
+    );
     res.header("Access-Control-Allow-Origin", "*");
     return res.json(results);
   } catch (err: any) {

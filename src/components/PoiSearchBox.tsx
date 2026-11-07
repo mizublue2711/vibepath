@@ -110,89 +110,181 @@ export function parseMapboxGeocoding(features: any[]): SearchResult[] {
     .filter((item) => Number.isFinite(item.longitude) && Number.isFinite(item.latitude));
 }
 
+const GENERIC_VIETNAMESE_FOOD_TERMS = [
+  'quan chay',
+  'nha hang chay',
+  'com chay',
+  'do chay',
+  'chay',
+  'banh cuon',
+  'banh cuon long ga',
+  'bun bo',
+  'quan oc',
+  'oc dem',
+  'pho bo',
+  'pho ga',
+  'com tam',
+  'banh mi',
+  'ca phe',
+  'coffee',
+  'hu tieu',
+  'bun cha',
+  'bun dau',
+  'bun rieu',
+  'lau',
+  'nuong',
+  'quan an',
+  'nha hang',
+];
+
+function normalizeVietnameseText(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .trim();
+}
+
+function isGenericVietnameseFoodQuery(rawQuery: string): boolean {
+  const norm = normalizeVietnameseText(rawQuery);
+  return GENERIC_VIETNAMESE_FOOD_TERMS.some(
+    (term) => norm === term || norm.startsWith(`${term} `) || norm.includes(term)
+  );
+}
+
+function isWithinVietnamBounds(lng: number, lat: number): boolean {
+  return lng >= 102.0 && lng <= 110.5 && lat >= 8.0 && lat <= 23.8;
+}
+
 export async function searchLocationsMapbox(
   query: string,
   mapCenterLngLat?: [number, number]
 ): Promise<SearchResult[]> {
-  const token = ApiKeyManager.getMapKey() || import.meta.env.VITE_MAPBOX_TOKEN;
   if (!query.trim()) return [];
 
-  if (token && token.trim().startsWith('pk.') && !token.includes('xxxxxxxx')) {
+  const envToken = (import.meta.env.VITE_MAPBOX_TOKEN || '').trim();
+  const customOrEnvToken = (ApiKeyManager.getMapKey() || '').trim();
+  const token =
+    envToken && envToken.startsWith('pk.') && !envToken.includes('xxxxxxxx')
+      ? envToken
+      : customOrEnvToken;
+
+  // 1. Strict Proximity Bias: ALWAYS resolve [lng, lat] from active map center
+  const [lng, lat] =
+    mapCenterLngLat &&
+    Number.isFinite(mapCenterLngLat[0]) &&
+    Number.isFinite(mapCenterLngLat[1])
+      ? [Number(mapCenterLngLat[0].toFixed(6)), Number(mapCenterLngLat[1].toFixed(6))]
+      : [106.7024, 10.7611];
+
+  // 2. Query Pre-Processing for Generic Vietnamese Food Terms & Vietnam Bounds
+  const isGenericFood = isGenericVietnameseFoodQuery(query);
+  const inVietnam = isWithinVietnamBounds(lng, lat);
+
+  if (token && token.startsWith('pk.') && !token.includes('xxxxxxxx')) {
     try {
-      const proximity =
-        mapCenterLngLat &&
-        Number.isFinite(mapCenterLngLat[0]) &&
-        Number.isFinite(mapCenterLngLat[1])
-          ? `&proximity=${mapCenterLngLat[0]},${mapCenterLngLat[1]}`
-          : '';
+      const countryParam = inVietnam || isGenericFood ? '&country=vn' : '';
+      const searchBoxTypes = isGenericFood
+        ? 'poi'
+        : 'poi,address,place,locality,district';
+      const categoryParam = isGenericFood
+        ? '&category=food_and_drink,restaurant,cafe'
+        : '';
 
-      const endpoint = `https://api.mapbox.com/search/searchbox/v1/forward?q=${encodeURIComponent(
+      // Primary Mapbox Search Box API v1 lookup with category & strict proximity bias
+      const searchBoxEndpoint = `https://api.mapbox.com/search/searchbox/v1/forward?q=${encodeURIComponent(
         query
-      )}&access_token=${token}&types=poi,address&category=food_and_drink,restaurant,cafe,bar&language=vi&limit=8${proximity}`;
+      )}&access_token=${encodeURIComponent(
+        token
+      )}&types=${searchBoxTypes}${categoryParam}${countryParam}&language=vi&limit=8&proximity=${lng},${lat}`;
 
-      const res = await fetch(endpoint);
-      if (!res.ok) {
-        const fallbackEndpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-          query
-        )}.json?access_token=${token}&types=poi,address&language=vi&limit=8${proximity}`;
-        const fallbackRes = await fetch(fallbackEndpoint);
-        const fallbackData = await fallbackRes.json();
-        return parseMapboxGeocoding(fallbackData.features || []);
+      const sbRes = await fetch(searchBoxEndpoint);
+      if (!sbRes.ok) {
+        console.error(
+          `[Mapbox SearchBox HTTP Error] Status ${sbRes.status} (${sbRes.statusText}) for query "${query}"`
+        );
+      } else {
+        const sbData = await sbRes.json();
+        const rawItems = sbData.suggestions || sbData.features || [];
+        if (Array.isArray(rawItems) && rawItems.length > 0) {
+          const parsedSb = parseMapboxSearchBox(rawItems);
+          if (parsedSb.length > 0) {
+            return parsedSb;
+          }
+        }
       }
 
-      const data = await res.json();
-      const rawItems = data.suggestions || data.features || [];
-      if (Array.isArray(rawItems) && rawItems.length > 0) {
-        return parseMapboxSearchBox(rawItems);
-      }
+      // Fallback Mapbox Geocoding API with strict proximity bias & country=vn in Vietnam bounds
+      const endpoint = isGenericFood || inVietnam
+        ? `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+            query
+          )}.json?access_token=${token}&types=poi,address&country=vn&language=vi&limit=8&proximity=${lng},${lat}`
+        : `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+            query
+          )}.json?access_token=${token}&types=poi,address,place,locality,district&language=vi&limit=8&proximity=${lng},${lat}`;
 
-      const fallbackEndpoint = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-        query
-      )}.json?access_token=${token}&types=poi,address&language=vi&limit=8${proximity}`;
-      const fallbackRes = await fetch(fallbackEndpoint);
-      if (fallbackRes.ok) {
-        const fallbackData = await fallbackRes.json();
-        return parseMapboxGeocoding(fallbackData.features || []);
+      const geoRes = await fetch(endpoint);
+      if (!geoRes.ok) {
+        console.error(
+          `[Mapbox Geocoding HTTP Error] Status ${geoRes.status} (${geoRes.statusText}) for query "${query}"`
+        );
+      } else {
+        const geoData = await geoRes.json();
+        const geoFeatures = geoData.features || [];
+        if (Array.isArray(geoFeatures) && geoFeatures.length > 0) {
+          const parsedGeo = parseMapboxGeocoding(geoFeatures);
+          if (parsedGeo.length > 0) {
+            return parsedGeo;
+          }
+        }
       }
-
-      return [];
     } catch (err) {
-      console.error('[Mapbox Search Error]:', err);
-      return [];
+      console.error('[Mapbox Search Network Error]:', err);
     }
   }
 
+  // 3. Backend Proxy Fallback (/api/poi-search) with strict proximity bias
   try {
-    const serverRes = await fetch(`/api/poi-search?q=${encodeURIComponent(query)}`);
-    if (serverRes.ok) {
-      const serverData = await serverRes.json();
-      if (Array.isArray(serverData)) {
-        return serverData.slice(0, 8).map((item: any, idx: number): SearchResult => {
-          const lng = Number(
-            Number(item.coordinates?.[0] ?? item.longitude ?? 106.7024).toFixed(6)
-          );
-          const lat = Number(
-            Number(item.coordinates?.[1] ?? item.latitude ?? 10.7611).toFixed(6)
-          );
-          const addr = String(item.address || item.fullAddress || item.name || '').trim();
-          return {
-            id: String(item.id || `mapbox-poi-${idx}`),
-            name: String(item.name || query).trim(),
-            address: addr,
-            fullAddress: addr,
-            coordinates: [lng, lat],
-            longitude: lng,
-            latitude: lat,
-          };
-        });
-      }
+    const serverEndpoint = `/api/poi-search?q=${encodeURIComponent(query)}&proximity=${lng},${lat}`;
+    const serverRes = await fetch(serverEndpoint);
+    if (!serverRes.ok) {
+      console.error(
+        `[/api/poi-search HTTP Error] Status ${serverRes.status} (${serverRes.statusText}) for query "${query}"`
+      );
+      return [];
+    }
+
+    const serverData = await serverRes.json();
+    if (Array.isArray(serverData)) {
+      return serverData.slice(0, 8).map((item: any, idx: number): SearchResult => {
+        const itemLng = Number(
+          Number(item.coordinates?.[0] ?? item.longitude ?? lng).toFixed(6)
+        );
+        const itemLat = Number(
+          Number(item.coordinates?.[1] ?? item.latitude ?? lat).toFixed(6)
+        );
+        const addr = String(item.address || item.fullAddress || item.name || '').trim();
+        return {
+          id: String(item.id || `mapbox-poi-${idx}`),
+          name: String(item.name || query).trim(),
+          address: addr,
+          fullAddress: addr,
+          coordinates: [itemLng, itemLat],
+          longitude: itemLng,
+          latitude: itemLat,
+        };
+      });
     }
   } catch (err) {
-    console.error('[Mapbox Search Error]:', err);
+    console.error('[Mapbox Proxy Search Error]:', err);
   }
 
   return [];
 }
+
+export const DEFAULT_POI_SEARCH_PLACEHOLDER =
+  '[ 🔍 NHẬP TÊN QUÁN HOẶC ĐỊA CHỈ (VD: "CHAY LOVING HUT", "BÁNH CUỐN BÀ HOÀNH"...) ]';
 
 export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
   onSelectLocation,
@@ -332,7 +424,7 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
           [ 01 // GEO_INDEX_LOOKUP ]
         </span>
         <span className="font-mono text-[10px] text-[#8A8FA3] hidden sm:inline">
-          MAPBOX_V6 // GLOBAL_POI_INDEX
+          MAPBOX_V6 // PROXIMITY_BIAS_ACTIVE
         </span>
       </div>
 
@@ -357,7 +449,7 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
           }}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder || 'SEARCH_COORDINATES_OR_POI...'}
+          placeholder={placeholder || DEFAULT_POI_SEARCH_PLACEHOLDER}
           aria-label="Search POI Locations"
           className="flex-1 min-w-0 min-h-[40px] px-3 bg-transparent text-[#FFFFFF] font-mono text-xs placeholder:text-[#8A8FA3] focus:outline-none rounded-none"
         />

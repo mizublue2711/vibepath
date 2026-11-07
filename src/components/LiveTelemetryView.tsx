@@ -629,7 +629,7 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
                   onSelectLocation={handleSelectAutocompletePoi}
                   mapCenterLngLat={[spotLng, spotLat]}
                   language={language}
-                  placeholder="SEARCH_COORDINATES_OR_POI..."
+                  placeholder='[ 🔍 NHẬP TÊN QUÁN HOẶC ĐỊA CHỈ (VD: "CHAY LOVING HUT", "BÁNH CUỐN BÀ HOÀNH"...) ]'
                   compact={true}
                 />
 

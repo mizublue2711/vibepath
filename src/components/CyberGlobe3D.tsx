@@ -139,6 +139,11 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     bearing: 40,
   });
 
+  const [activeMapCenter, setActiveMapCenter] = useState<[number, number]>(() => [
+    activePoi?.longitude || 106.7024,
+    activePoi?.latitude || 10.7611,
+  ]);
+
   // Animated camera state for built-in 60FPS 3D Globe & Tactical Street Renderer
   const animCameraRef = useRef<{
     lng: number;
@@ -587,6 +592,11 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
 
       map.on('move', () => {
         if (isUnmounted || !mapRef.current) return;
+        const center = mapRef.current.getCenter();
+        setActiveMapCenter([
+          Number(center.lng.toFixed(6)),
+          Number(center.lat.toFixed(6)),
+        ]);
         setCameraTelemetry({
           zoom: Number(mapRef.current.getZoom().toFixed(2)),
           pitch: Math.round(mapRef.current.getPitch()),
@@ -1020,6 +1030,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
 
   const handleSelectSearchLocation = (result: GeocodedPoiResult) => {
     const [lng, lat] = result.coordinates || [result.longitude, result.latitude];
+    setActiveMapCenter([lng, lat]);
     flyToFoodPoiAndRenderTag(
       lng,
       lat,
@@ -1039,9 +1050,9 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       <div className="bg-[#0D0E17] border-b border-[#1F1F2E] px-3 py-2.5 rounded-none">
         <PoiSearchBox
           onSelectLocation={handleSelectSearchLocation}
-          mapCenterLngLat={[targetDisplayPoi.longitude, targetDisplayPoi.latitude]}
+          mapCenterLngLat={activeMapCenter}
           language={language}
-          placeholder="SEARCH_COORDINATES_OR_POI..."
+          placeholder='[ 🔍 NHẬP TÊN QUÁN HOẶC ĐỊA CHỈ (VD: "CHAY LOVING HUT", "BÁNH CUỐN BÀ HOÀNH"...) ]'
           compact={true}
         />
       </div>
