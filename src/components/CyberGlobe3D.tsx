@@ -20,6 +20,7 @@ import {
   LanguageCode,
   LegoGraphicStyleKey,
 } from '../data/vibePathData';
+import { bsplineSmooth, CoordinatePoint } from '../utils/bsplineSmooth';
 import {
   Globe2,
   Rocket,
@@ -1036,12 +1037,17 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
             );
           }
 
-          const routeCoords =
-            telemetryData.length >= 2
+          const rawControlPoints: CoordinatePoint[] =
+            foodPois.length >= 2
+              ? foodPois.map((fp) => [fp.longitude, fp.latitude])
+              : telemetryData.length >= 2
               ? telemetryData.map((pt) => [pt.longitude, pt.latitude])
-              : foodPois.map((fp) => [fp.longitude, fp.latitude]);
+              : [];
 
-          if (routeCoords.length >= 2) {
+          const smoothedCoords =
+            rawControlPoints.length >= 2 ? bsplineSmooth(rawControlPoints, 8) : [];
+
+          if (smoothedCoords.length >= 2) {
             if (!map.getSource('cyber-route')) {
               map.addSource('cyber-route', {
                 type: 'geojson',
@@ -1050,7 +1056,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
                   properties: {},
                   geometry: {
                     type: 'LineString',
-                    coordinates: routeCoords,
+                    coordinates: smoothedCoords,
                   },
                 },
               });
@@ -1288,27 +1294,31 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       });
 
       // Spatial Coaxial Laser Route (Dynamic Brand Accent Color: 12px outer glow + 2.5px core stream)
-      ctx.save();
-      ctx.strokeStyle = activeAccent;
-      ctx.globalAlpha = 0.26;
-      ctx.lineWidth = 12;
-      ctx.beginPath();
-      ctx.moveTo(cx - 240, cy + 95);
-      ctx.lineTo(cx - 95, cy + 35);
-      ctx.lineTo(cx, cy);
-      ctx.lineTo(cx + 145, cy - 45);
-      ctx.stroke();
+      // Rendered when foodPois >= 2 or fallback route is present
+      const poisCount = foodPois.length;
+      if (poisCount >= 2 || telemetryData.length >= 2) {
+        ctx.save();
+        ctx.strokeStyle = activeAccent;
+        ctx.globalAlpha = 0.26;
+        ctx.lineWidth = 12;
+        ctx.beginPath();
+        ctx.moveTo(cx - 240, cy + 95);
+        ctx.lineTo(cx - 95, cy + 35);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(cx + 145, cy - 45);
+        ctx.stroke();
 
-      ctx.globalAlpha = 1;
-      ctx.strokeStyle = activeAccent;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.moveTo(cx - 240, cy + 95);
-      ctx.lineTo(cx - 95, cy + 35);
-      ctx.lineTo(cx, cy);
-      ctx.lineTo(cx + 145, cy - 45);
-      ctx.stroke();
-      ctx.restore();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = activeAccent;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - 240, cy + 95);
+        ctx.lineTo(cx - 95, cy + 35);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(cx + 145, cy - 45);
+        ctx.stroke();
+        ctx.restore();
+      }
 
       // Stage 4 Pulsing Neon Venue Beacon: Ground Radar Rings + Vertical Cyan Laser Column
       const pulsePhase1 = (elapsed * 0.85) % 1;
@@ -1389,17 +1399,80 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     };
   }, [useBuiltIn3DEngine]);
 
-  // Live GeoJSON LineString update for Coaxial Laser Route
+  // Live GeoJSON LineString update for Coaxial Laser Route with B-Spline Path Smoothing
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     try {
-      const routeCoords =
-        telemetryData.length >= 2
+      const rawControlPoints: CoordinatePoint[] =
+        foodPois.length >= 2
+          ? foodPois.map((fp) => [fp.longitude, fp.latitude])
+          : telemetryData.length >= 2
           ? telemetryData.map((pt) => [pt.longitude, pt.latitude])
-          : foodPois.map((fp) => [fp.longitude, fp.latitude]);
+          : [];
 
-      if (routeCoords.length >= 2) {
+      const smoothedCoords =
+        rawControlPoints.length >= 2 ? bsplineSmooth(rawControlPoints, 8) : [];
+
+      if (smoothedCoords.length >= 2) {
+        let src = map.getSource('cyber-route') as mapboxgl.GeoJSONSource | undefined;
+        if (!src) {
+          map.addSource('cyber-route', {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: {
+                type: 'LineString',
+                coordinates: smoothedCoords,
+              },
+            },
+          });
+          src = map.getSource('cyber-route') as mapboxgl.GeoJSONSource | undefined;
+        } else {
+          src.setData({
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: smoothedCoords,
+            },
+          });
+        }
+
+        const preset = MapModeController.getPreset(activeModeRef.current || 'DEM_3D');
+        const activeAccent = accentColorRef.current || '#00E5FF';
+
+        if (!map.getLayer('cyber-route-glow')) {
+          map.addLayer({
+            id: 'cyber-route-glow',
+            type: 'line',
+            source: 'cyber-route',
+            layout: { 'line-join': 'miter', 'line-cap': 'square' },
+            paint: {
+              'line-color': activeAccent,
+              'line-width': preset.routeGlowWidth,
+              'line-opacity': preset.routeGlowOpacity,
+              'line-blur': preset.routeGlowBlur,
+            },
+          });
+        }
+
+        if (!map.getLayer('cyber-route-core')) {
+          map.addLayer({
+            id: 'cyber-route-core',
+            type: 'line',
+            source: 'cyber-route',
+            layout: { 'line-join': 'miter', 'line-cap': 'square' },
+            paint: {
+              'line-color': activeAccent,
+              'line-width': preset.routeCoreWidth,
+              'line-opacity': 1.0,
+            },
+          });
+        }
+      } else {
+        // If < 2 POIs, clear route line coordinates if source exists
         const src = map.getSource('cyber-route') as mapboxgl.GeoJSONSource | undefined;
         if (src) {
           src.setData({
@@ -1407,13 +1480,13 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
             properties: {},
             geometry: {
               type: 'LineString',
-              coordinates: routeCoords,
+              coordinates: [],
             },
           });
         }
       }
     } catch (_) {}
-  }, [telemetryData, foodPois, mapReady]);
+  }, [telemetryData, foodPois, mapReady, activeMode]);
 
   // Keep Brutalist [ 01 // POI ] HTML markers synced
   useEffect(() => {
