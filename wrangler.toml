@@ -15,12 +15,10 @@ directory = "./dist"
 command = "npm run build"
 watch_dir = "src"
 
-# Biến môi trường cho Production
 [vars]
 ENVIRONMENT = "production"
 ENABLE_OSM_FALLBACK = "true"
 
-# Biến môi trường cho Preview Deployments
 [previews.vars]
 ENVIRONMENT = "preview"
 ENABLE_OSM_FALLBACK = "true"
