@@ -146,6 +146,15 @@ export const vi = {
     brandFontFamily: 'Phông chữ Thương hiệu (--font-family)',
     gpsStatusColor: 'Màu Nổi bật GPS & Trạng thái',
   },
+  onboarding: {
+    title: '[ 🚀 HƯỚNG DẪN KHỞI ĐỘNG NHANH VIBEPATH ]',
+    step1: '📍 Bước 1: Tìm địa điểm tại GEO_INDEX_LOOKUP',
+    step2: '📝 Bước 2: Thêm số sao & ghi chú hương vị',
+    step3: '🎬 Bước 3: Bấm [ 📍 LƯU & GHIM ĐIỂM NÀY ] để kết xuất đường bay 3D',
+    tryNow: '[ 🎮 THỬ NGAY ]',
+    guideButton: '[ ❓ HƯỚNG DẪN ]',
+    close: '[ × ĐÓNG ]',
+  },
 };
 
 export type LocaleTranslations = typeof vi;
