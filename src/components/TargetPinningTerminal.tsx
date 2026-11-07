@@ -48,6 +48,7 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
   const { t } = useTranslation();
 
   const [activePoi, setActivePoi] = useState<ActivePoiDraft | null>(null);
+  const [selectedPinnedId, setSelectedPinnedId] = useState<string | null>(null);
   const [spotName, setSpotName] = useState<string>('');
   const [spotLat, setSpotLat] = useState<number>(Number(activeRiderPos.lat.toFixed(5)));
   const [spotLng, setSpotLng] = useState<number>(Number(activeRiderPos.lng.toFixed(5)));
@@ -72,6 +73,7 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
 
   const handleSelectAutocompletePoi = (result: GeocodedPoiResult) => {
     const defaultNote = spotNote.trim() || result.fullAddress || '';
+    setSelectedPinnedId(null);
     setSpotName(result.name);
     setSpotLat(result.latitude);
     setSpotLng(result.longitude);
@@ -102,6 +104,7 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
         rating: prev?.rating ?? spotRating,
         note: prev?.note ?? spotNote,
       }));
+      setSelectedPinnedId(null);
     } else if (!activePoi?.latitude) {
       setActivePoi(null);
     } else {
@@ -129,8 +132,19 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
     }
   };
 
+  const handleSelectPinnedPoi = (loc: CulinaryNode) => {
+    setSelectedPinnedId(loc.id);
+    setActivePoi(null);
+    setSpotName(loc.name);
+    setSpotLat(loc.latitude);
+    setSpotLng(loc.longitude);
+    setSpotRating(loc.rating as 1 | 2 | 3 | 4 | 5);
+    setSpotNote(loc.note || loc.noteEn || '');
+  };
+
   const handleRemoveActivePoiChip = () => {
     setActivePoi(null);
+    setSelectedPinnedId(null);
     setSpotName('');
     setSpotNote('');
     setSearchResetKey((k) => k + 1);
@@ -140,6 +154,7 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
     if (window.confirm(t('pinning.clearSessionConfirm'))) {
       onClearSession?.();
       setActivePoi(null);
+      setSelectedPinnedId(null);
       setSpotName('');
       setSpotNote('');
       setSearchResetKey((k) => k + 1);
@@ -178,6 +193,7 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
 
     // Reset active POI, search input, and notes box for next location
     setActivePoi(null);
+    setSelectedPinnedId(null);
     setSpotName('');
     setSpotNote('');
     setSearchResetKey((k) => k + 1);
@@ -304,6 +320,33 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
               })}
             </div>
 
+            {/* Dynamic Notes Label */}
+            {(() => {
+              let activeIndexStr = '';
+              let activeNameStr = '';
+
+              if (activePoi) {
+                activeIndexStr = '01';
+                activeNameStr = (activePoi.name || t('pinning.defaultPoiPrefix')).toUpperCase();
+              } else if (selectedPinnedId) {
+                const pinnedIdx = pinnedLocations.findIndex((p) => p.id === selectedPinnedId);
+                if (pinnedIdx !== -1) {
+                  activeIndexStr = String(pinnedIdx + 1).padStart(2, '0');
+                  activeNameStr = (pinnedLocations[pinnedIdx].name || t('pinning.defaultPoiPrefix')).toUpperCase();
+                }
+              }
+
+              if (activeIndexStr && activeNameStr) {
+                return (
+                  <div className="font-mono text-xs text-[#00E5FF] font-semibold flex items-center gap-1 select-none">
+                    <span>📝 {t('pinning.tasteNotesFor')}:</span>
+                    <span>[ 📍 {activeIndexStr} // {activeNameStr} ]</span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             <textarea
               id="poi-note"
               rows={2}
@@ -325,7 +368,7 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
                   {activePoi && (
                     <div
                       style={{
-                        background: 'rgba(0, 229, 255, 0.1)',
+                        background: 'rgba(0, 229, 255, 0.15)',
                       }}
                       className="px-2.5 py-1.5 border border-[#00E5FF] font-mono text-xs flex items-center gap-2 text-white shadow-[0_0_8px_rgba(0,229,255,0.2)] rounded-none shrink-0"
                     >
@@ -347,18 +390,37 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
                   {/* Pinned history list under notes box */}
                   {pinnedLocations.map((loc, idx) => {
                     const chipIdx = String((activePoi ? idx + 2 : idx + 1)).padStart(2, '0');
+                    const isSelected = selectedPinnedId === loc.id;
                     return (
                       <div
                         key={loc.id}
-                        className="px-2.5 py-1.5 border border-[#1F1F2E] bg-[#05050A] hover:border-[#00E5FF]/40 font-mono text-xs flex items-center gap-2 text-[#8A8FA3] rounded-none shrink-0"
+                        onClick={() => handleSelectPinnedPoi(loc)}
+                        style={
+                          isSelected
+                            ? {
+                                background: 'rgba(0, 229, 255, 0.15)',
+                              }
+                            : undefined
+                        }
+                        className={`px-2.5 py-1.5 border font-mono text-xs flex items-center gap-2 rounded-none shrink-0 cursor-pointer transition-all ${
+                          isSelected
+                            ? 'border-[#00E5FF] text-white shadow-[0_0_8px_rgba(0,229,255,0.2)]'
+                            : 'border-[#1F1F2E] bg-[#05050A] text-[#8A8FA3] hover:border-[#00E5FF]/40'
+                        }`}
                       >
-                        <span className="text-white">
+                        <span className={isSelected ? 'text-[#00E5FF] font-bold' : 'text-white'}>
                           [ 📍 {chipIdx} // {loc.name.toUpperCase()} ]
                         </span>
                         {onDeleteNode && (
                           <button
                             type="button"
-                            onClick={() => onDeleteNode(loc.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (selectedPinnedId === loc.id) {
+                                setSelectedPinnedId(null);
+                              }
+                              onDeleteNode(loc.id);
+                            }}
                             className="text-[#8A8FA3] hover:text-[#FF5252] p-0.5 cursor-pointer rounded-none transition-colors"
                             title={t('pinning.removePoiChip')}
                             aria-label={t('pinning.removePoiChip')}

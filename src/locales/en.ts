@@ -56,6 +56,7 @@ export const en: LocaleTranslations = {
     latitudeAria: 'Latitude',
     longitudeAria: 'Longitude',
     tasteNotesPlaceholder: 'Taste notes for .SRT subtitles and AI chapters...',
+    tasteNotesFor: 'Taste notes for',
     imageUrlPlaceholder: 'Image URL...',
     lastSync: 'LAST_SYNC',
     readyToSync: 'READY_TO_SYNC',
