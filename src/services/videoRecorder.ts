@@ -92,9 +92,10 @@ export class VideoRecorder {
       const { mimeType, extension } = this.detectSupportedMime();
       const stream: MediaStream = (targetCanvas as any).captureStream(60);
 
+      // High-Bitrate Video Upgrade: 20 Mbps for ultra-sharp telemetry text and HUD overlays
       const recorder = new MediaRecorder(stream, {
         mimeType,
-        videoBitsPerSecond: 8_000_000, // 8 Mbps high-definition 60FPS bitrate
+        videoBitsPerSecond: 20000000, // 20 Mbps for ultra-sharp telemetry text rendering
       });
 
       this.activeChunks = [];
