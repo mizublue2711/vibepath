@@ -6,28 +6,6 @@
 
 name = "vibepath-web-client"
 compatibility_date = "2026-11-01"
-
-# Đặt thư mục đầu ra sau khi build là ./dist (Standard Vite Output)
-pages_build_output_dir = "./dist"
-
-[site]
-bucket = "./dist"
-
-[build]
-command = "npm run build"
-watch_dir = "src"
-
-[vars]
-ENVIRONMENT = "production"
-
-# ==========================================
-# CLOUDFLARE WORKERS / PAGES CONFIGURATION
-# Project: VibePath Web Client (vibepath)
-# Repository: https://github.com/mizublue2711/vibepath
-# ==========================================
-
-name = "vibepath-web-client"
-compatibility_date = "2026-11-01"
 pages_build_output_dir = "./dist"
 
 [site]
@@ -42,7 +20,7 @@ watch_dir = "src"
 ENVIRONMENT = "production"
 ENABLE_OSM_FALLBACK = "true"
 
-# Biến môi trường cho Preview Deployments (Bắt buộc theo yêu cầu Cloudflare)
+# Biến môi trường cho Preview Deployments
 [previews.vars]
 ENVIRONMENT = "preview"
 ENABLE_OSM_FALLBACK = "true"
