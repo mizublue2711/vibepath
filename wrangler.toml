@@ -1,0 +1,32 @@
+# ==========================================
+# CLOUDFLARE WORKERS / PAGES CONFIGURATION
+# Project: VibePath Web Client (vibepath)
+# Repository: https://github.com/mizublue2711/vibepath
+# ==========================================
+
+name = "vibepath-web-client"
+main = "dist/_worker.js"
+compatibility_date = "2026-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[site]
+bucket = "./dist"
+
+# Single Page Application (SPA) Build Configuration
+[build]
+command = "npm run build"
+watch_dir = "src"
+
+# Environment Variables
+[vars]
+ENVIRONMENT = "production"
+ENABLE_OSM_FALLBACK = "true"
+
+# ==========================================
+# CLOUDFLARE DASHBOARD SECRETS REQUIREMENT:
+# Add the following secret in Cloudflare Dashboard:
+# Workers & Pages -> vibepath-web-client -> Settings -> Environment Variables
+#
+# Secret Name: VITE_MAPBOX_TOKEN
+# Value: <Your Mapbox Public Access Token>
+# ==========================================
