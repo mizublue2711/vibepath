@@ -12,6 +12,7 @@ import {
   GLOBAL_DISTRICT_FILL_LAYER_ID,
   GLOBAL_DISTRICT_STROKE_LAYER_ID,
 } from '../services/cinematicFlightEngine';
+import { GlobalBoundaryService } from '../services/globalBoundaryService';
 import { PoiSearchBox, GeocodedPoiResult } from './PoiSearchBox';
 import {
   CulinaryNode,
@@ -81,6 +82,74 @@ function validateMapboxToken(rawToken: string): { valid: boolean } {
   return { valid: true };
 }
 
+function ensureBeaconKeyframesInjected(): void {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('vibepath-neon-beacon-keyframes')) return;
+  const style = document.createElement('style');
+  style.id = 'vibepath-neon-beacon-keyframes';
+  style.textContent = `
+    @keyframes cyberRadarRingExpand {
+      0% {
+        transform: translate(-50%, -50%) scale(0.45);
+        opacity: 0.95;
+      }
+      70% {
+        transform: translate(-50%, -50%) scale(2.35);
+        opacity: 0.25;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(2.75);
+        opacity: 0;
+      }
+    }
+    @keyframes cyberLaserBeamPulse {
+      0%, 100% {
+        opacity: 0.92;
+        filter: drop-shadow(0 0 10px #00E5FF) drop-shadow(0 0 22px #00E5FF);
+      }
+      50% {
+        opacity: 1;
+        filter: drop-shadow(0 0 16px #00E5FF) drop-shadow(0 0 34px #00E5FF);
+      }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function buildLaserColumnFootprint(
+  lng: number,
+  lat: number,
+  radiusMeters = 2.4
+): GeoJSON.Feature<GeoJSON.Polygon> {
+  const ring: [number, number][] = [];
+  const segments = 12;
+  const dLat = radiusMeters / 111320;
+  const dLng = radiusMeters / (111320 * Math.max(0.2, Math.cos((lat * Math.PI) / 180)));
+
+  for (let i = 0; i < segments; i++) {
+    const angle = (i / segments) * Math.PI * 2;
+    ring.push([
+      Number((lng + Math.cos(angle) * dLng).toFixed(7)),
+      Number((lat + Math.sin(angle) * dLat).toFixed(7)),
+    ]);
+  }
+  if (ring.length > 0) {
+    ring.push(ring[0]);
+  }
+
+  return {
+    type: 'Feature',
+    properties: {
+      height: 240,
+      min_height: 0,
+    },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [ring],
+    },
+  };
+}
+
 export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
   telemetryData,
   foodPois,
@@ -118,6 +187,8 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       countryCode: 'VN',
       hudReadout: 'District 1, Ben Thanh',
     });
+  const globalDistrictScanRef = useRef<GlobalDistrictResolution>(globalDistrictScan);
+  globalDistrictScanRef.current = globalDistrictScan;
 
   const [flightStatus, setFlightStatus] = useState<FlightStageUpdate | null>(null);
   const isRecordingRef = useRef<boolean>(false);
@@ -129,7 +200,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
   const [mapReady, setMapReady] = useState<boolean>(false);
   const [useBuiltIn3DEngine, setUseBuiltIn3DEngine] = useState<boolean>(false);
 
-  const [cameraTelemetry, setCameraTelemetry] = useState<{
+  const [, setCameraTelemetry] = useState<{
     zoom: number;
     pitch: number;
     bearing: number;
@@ -204,6 +275,227 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     }
   }, []);
 
+  /**
+   * Stage 4 Upgrade: Mount Pulsing Cyberpunk Neon Venue Beacon + Ground Radar Ring + Vertical Cyan Laser Column
+   * Displays HUD label: [ 📍 TARGET LOCKED // <VENUE_NAME_UPPERCASE> ]
+   */
+  const mountTargetRadarBeacon = useCallback(
+    (map: mapboxgl.Map, lng: number, lat: number, venueName?: string) => {
+      ensureBeaconKeyframesInjected();
+      const cleanLng = Number(lng.toFixed(6));
+      const cleanLat = Number(lat.toFixed(6));
+      const displayLabel = (venueName || targetPoiRef.current?.name || 'FOOD_POI_TARGET')
+        .trim()
+        .toUpperCase();
+
+      // 1. Update WebGL Ground Radar Ring & 3D Laser Light Column layers
+      try {
+        const pointData: GeoJSON.Feature<GeoJSON.Point> = {
+          type: 'Feature',
+          properties: { name: displayLabel },
+          geometry: {
+            type: 'Point',
+            coordinates: [cleanLng, cleanLat],
+          },
+        };
+
+        const existingRadarSrc = map.getSource('target-venue-radar-source') as
+          | mapboxgl.GeoJSONSource
+          | undefined;
+        if (existingRadarSrc) {
+          existingRadarSrc.setData(pointData);
+        } else if (map.isStyleLoaded()) {
+          map.addSource('target-venue-radar-source', {
+            type: 'geojson',
+            data: pointData,
+          });
+        }
+
+        if (map.getSource('target-venue-radar-source') && !map.getLayer('target-venue-radar-outer')) {
+          map.addLayer({
+            id: 'target-venue-radar-outer',
+            type: 'circle',
+            source: 'target-venue-radar-source',
+            paint: {
+              'circle-radius': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                10,
+                8,
+                15,
+                22,
+                18,
+                38,
+              ],
+              'circle-color': 'rgba(0, 229, 255, 0.12)',
+              'circle-stroke-color': '#00E5FF',
+              'circle-stroke-width': 2,
+              'circle-pitch-alignment': 'map',
+            },
+          });
+        }
+
+        if (map.getSource('target-venue-radar-source') && !map.getLayer('target-venue-radar-inner')) {
+          map.addLayer({
+            id: 'target-venue-radar-inner',
+            type: 'circle',
+            source: 'target-venue-radar-source',
+            paint: {
+              'circle-radius': [
+                'interpolate',
+                ['linear'],
+                ['zoom'],
+                10,
+                4,
+                15,
+                10,
+                18,
+                16,
+              ],
+              'circle-color': 'rgba(0, 229, 255, 0.35)',
+              'circle-stroke-color': '#00E5FF',
+              'circle-stroke-width': 2.5,
+              'circle-pitch-alignment': 'map',
+            },
+          });
+        }
+
+        const laserFootprint = buildLaserColumnFootprint(cleanLng, cleanLat, 2.2);
+        const existingLaserSrc = map.getSource('target-venue-laser-source') as
+          | mapboxgl.GeoJSONSource
+          | undefined;
+        if (existingLaserSrc) {
+          existingLaserSrc.setData(laserFootprint);
+        } else if (map.isStyleLoaded()) {
+          map.addSource('target-venue-laser-source', {
+            type: 'geojson',
+            data: laserFootprint,
+          });
+        }
+
+        if (
+          map.getSource('target-venue-laser-source') &&
+          !map.getLayer('target-venue-laser-column-3d')
+        ) {
+          map.addLayer({
+            id: 'target-venue-laser-column-3d',
+            type: 'fill-extrusion',
+            source: 'target-venue-laser-source',
+            minzoom: 13,
+            paint: {
+              'fill-extrusion-color': '#00E5FF',
+              'fill-extrusion-height': 240,
+              'fill-extrusion-base': 0,
+              'fill-extrusion-opacity': 0.52,
+            },
+          });
+        }
+      } catch (_) {}
+
+      // 2. Mount High-Contrast Cyberpunk Neon Radar Beacon DOM Marker
+      try {
+        if (newPinMarkerRef.current) {
+          newPinMarkerRef.current.remove();
+          newPinMarkerRef.current = null;
+        }
+
+        const el = document.createElement('div');
+        el.className = 'cyber-neon-venue-beacon';
+        el.style.pointerEvents = 'none';
+        el.innerHTML = `
+          <div style="
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            pointer-events: none;
+            user-select: none;
+          ">
+            <!-- Top HUD Label: [ 📍 TARGET LOCKED // <VENUE_NAME_UPPERCASE> ] -->
+            <div style="
+              background: rgba(5, 5, 10, 0.94);
+              border: 1px solid #00E5FF;
+              color: #00E5FF;
+              padding: 6px 12px;
+              font-family: 'JetBrains Mono', monospace;
+              font-size: 11px;
+              font-weight: 800;
+              letter-spacing: 0.08em;
+              border-radius: 0px !important;
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              white-space: nowrap;
+              box-shadow: 0 0 18px rgba(0, 229, 255, 0.45), inset 0 0 8px rgba(0, 229, 255, 0.18);
+            ">
+              <span style="color: #00E5FF;">[ 📍 TARGET LOCKED //</span>
+              <span style="color: #FFFFFF;">${displayLabel}</span>
+              <span style="color: #00E5FF;">]</span>
+            </div>
+
+            <!-- Vertical Cyan Laser Light Column extending upwards from venue pin -->
+            <div style="
+              width: 3px;
+              height: 112px;
+              background: linear-gradient(180deg, rgba(0, 229, 255, 0.25) 0%, #00E5FF 65%, #FFFFFF 100%);
+              box-shadow: 0 0 14px #00E5FF, 0 0 28px rgba(0, 229, 255, 0.85);
+              animation: cyberLaserBeamPulse 1.8s infinite ease-in-out;
+            "></div>
+
+            <!-- Ground-Level Pulsing Neon Radar Rings (#00E5FF) -->
+            <div style="
+              position: relative;
+              width: 24px;
+              height: 24px;
+              margin-top: -12px;
+            ">
+              <div style="
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 34px;
+                height: 34px;
+                border: 2px solid #00E5FF;
+                background: rgba(0, 229, 255, 0.16);
+                box-shadow: 0 0 16px #00E5FF;
+                border-radius: 9999px;
+                animation: cyberRadarRingExpand 1.9s infinite cubic-bezier(0.16, 1, 0.3, 1);
+              "></div>
+              <div style="
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 34px;
+                height: 34px;
+                border: 1.5px solid #00E5FF;
+                background: rgba(0, 229, 255, 0.08);
+                border-radius: 9999px;
+                animation: cyberRadarRingExpand 1.9s infinite 0.95s cubic-bezier(0.16, 1, 0.3, 1);
+              "></div>
+              <div style="
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                width: 10px;
+                height: 10px;
+                transform: translate(-50%, -50%);
+                background: #FFFFFF;
+                border: 2px solid #00E5FF;
+                box-shadow: 0 0 14px #00E5FF, 0 0 24px #00E5FF;
+              "></div>
+            </div>
+          </div>
+        `;
+
+        newPinMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+          .setLngLat([cleanLng, cleanLat])
+          .addTo(map);
+      } catch (_) {}
+    },
+    []
+  );
+
   useEffect(() => {
     const handleKeysUpdated = () => {
       const updatedToken =
@@ -244,15 +536,28 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           targetDisplayPoi.latitude,
           res
         );
+        mountTargetRadarBeacon(
+          mapRef.current,
+          targetDisplayPoi.longitude,
+          targetDisplayPoi.latitude,
+          targetDisplayPoi.name
+        );
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [targetDisplayPoi.longitude, targetDisplayPoi.latitude, mapReady, onDistrictResolved]);
+  }, [
+    targetDisplayPoi.longitude,
+    targetDisplayPoi.latitude,
+    targetDisplayPoi.name,
+    mapReady,
+    onDistrictResolved,
+    mountTargetRadarBeacon,
+  ]);
 
   /**
-   * Center the 3D camera over target food POI and render the HUD tag [ 01 // POI ] <VENUE_NAME_UPPERCASE>
+   * Center the 3D camera over target food POI and render the Pulsing Neon Venue Beacon
    */
   const flyToFoodPoiAndRenderTag = useCallback(
     (lng: number, lat: number, venueName?: string, address?: string) => {
@@ -307,40 +612,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       if (!map) return;
 
       try {
-        if (newPinMarkerRef.current) {
-          newPinMarkerRef.current.remove();
-          newPinMarkerRef.current = null;
-        }
-
-        const el = document.createElement('div');
-        el.className = 'cyber-new-poi-tag';
-        el.innerHTML = `
-          <div style="
-            background: #080A0F;
-            border: 1px solid #00E5FF;
-            color: #00E5FF;
-            padding: 5px 10px;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 0.08em;
-            border-radius: 0px !important;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            white-space: nowrap;
-            user-select: none;
-            box-shadow: 0 0 0 1px #00E676;
-          ">
-            <span style="color: #00E5FF;">[ 01 // POI ]</span>
-            <span style="color: #FFFFFF;">${displayLabel}</span>
-            <span style="color: #00E676;">(${cleanLat.toFixed(4)}°N, ${cleanLng.toFixed(4)}°E)</span>
-          </div>
-        `;
-
-        newPinMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
-          .setLngLat([cleanLng, cleanLat])
-          .addTo(map);
+        mountTargetRadarBeacon(map, cleanLng, cleanLat, displayLabel);
 
         map.flyTo({
           center: [cleanLng, cleanLat],
@@ -353,7 +625,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         });
       } catch (_) {}
     },
-    []
+    [mountTargetRadarBeacon]
   );
 
   /**
@@ -368,6 +640,15 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       // Sync built-in 3D camera stages
       animCameraRef.current.targetLng = target.longitude;
       animCameraRef.current.targetLat = target.latitude;
+
+      if (mapRef.current) {
+        mountTargetRadarBeacon(
+          mapRef.current,
+          target.longitude,
+          target.latitude,
+          target.name
+        );
+      }
 
       CinematicFlightEngine.runFourStageFlight({
         map: mapRef.current,
@@ -395,6 +676,14 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
             animCameraRef.current.targetZoom = 17.8;
             animCameraRef.current.targetPitch = 72;
             animCameraRef.current.targetBearing = 40;
+            if (mapRef.current) {
+              mountTargetRadarBeacon(
+                mapRef.current,
+                target.longitude,
+                target.latitude,
+                target.name
+              );
+            }
           }
           if (update.globalDistrictInfo) {
             setGlobalDistrictScan(update.globalDistrictInfo);
@@ -416,7 +705,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         },
       });
     },
-    []
+    [mountTargetRadarBeacon, onDistrictResolved]
   );
 
   useEffect(() => {
@@ -629,47 +918,15 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
             exaggeration: initialPreset.terrainExaggeration,
           });
 
-          try {
-            if (!map.getSource(GLOBAL_BOUNDARIES_SOURCE_ID)) {
-              map.addSource(GLOBAL_BOUNDARIES_SOURCE_ID, {
-                type: 'vector',
-                url: 'mapbox://mapbox.boundaries-adm2-v4',
-              });
-            }
-            if (!map.getLayer(GLOBAL_DISTRICT_FILL_LAYER_ID)) {
-              map.addLayer({
-                id: GLOBAL_DISTRICT_FILL_LAYER_ID,
-                type: 'fill',
-                source: GLOBAL_BOUNDARIES_SOURCE_ID,
-                'source-layer': 'boundaries_admin_2',
-                filter: ['==', ['get', 'mapbox_id'], '__NONE__'],
-                paint: {
-                  'fill-color': '#00E5FF',
-                  'fill-opacity': 0.12,
-                },
-              });
-            }
-            if (!map.getLayer(GLOBAL_DISTRICT_STROKE_LAYER_ID)) {
-              map.addLayer({
-                id: GLOBAL_DISTRICT_STROKE_LAYER_ID,
-                type: 'line',
-                source: GLOBAL_BOUNDARIES_SOURCE_ID,
-                'source-layer': 'boundaries_admin_2',
-                filter: ['==', ['get', 'mapbox_id'], '__NONE__'],
-                paint: {
-                  'line-color': '#00E5FF',
-                  'line-width': 2,
-                  'line-dasharray': [3, 1.5],
-                },
-              });
-            }
-          } catch (_) {}
+          // Stage 3 Upgrade: Initialize Mapbox Boundaries Vector Tileset (adm2-v4) & Dynamic GeoJSON Boundary Layers
+          GlobalBoundaryService.initBoundaryLayers(map);
 
           const layers = map.getStyle()?.layers;
           const labelLayerId = layers?.find(
             (layer) => layer.type === 'symbol' && layer.layout?.['text-field']
           )?.id;
 
+          // Stage 4 Upgrade: 3D Building Aesthetics (#0D1017 base with #1A233A tops + 0.4 ambient occlusion)
           if (!map.getLayer('3d-buildings')) {
             map.addLayer(
               {
@@ -680,11 +937,28 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
                 type: 'fill-extrusion',
                 minzoom: 12,
                 paint: {
-                  'fill-extrusion-color': initialPreset.buildingColor,
+                  'fill-extrusion-color': [
+                    'interpolate',
+                    ['linear'],
+                    ['zoom'],
+                    12,
+                    '#0D1017',
+                    15,
+                    [
+                      'interpolate',
+                      ['linear'],
+                      ['coalesce', ['get', 'height'], 15],
+                      0,
+                      '#0D1017',
+                      60,
+                      '#1A233A',
+                    ],
+                  ],
                   'fill-extrusion-height': ['get', 'height'],
                   'fill-extrusion-base': ['get', 'min_height'],
                   'fill-extrusion-opacity': initialPreset.buildingOpacity,
-                },
+                  'fill-extrusion-ambient-occlusion-intensity': 0.4,
+                } as any,
               },
               labelLayerId
             );
@@ -762,6 +1036,12 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           }
 
           mountBrutalistMarkers(map, foodPois);
+          mountTargetRadarBeacon(
+            map,
+            targetPoiRef.current.longitude,
+            targetPoiRef.current.latitude,
+            targetPoiRef.current.name
+          );
         } catch (_) {}
       });
 
@@ -784,7 +1064,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       setUseBuiltIn3DEngine(true);
       setMapReady(true);
     }
-  }, [mapboxToken, flyToFoodPoiAndRenderTag]);
+  }, [mapboxToken, flyToFoodPoiAndRenderTag, mountTargetRadarBeacon]);
 
   // Built-in 60FPS 3D Globe & Tactical Street Canvas Renderer (Zero User API Keys Required)
   useEffect(() => {
@@ -827,13 +1107,13 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       const isCad = activeModeRef.current === 'CAD_3D';
 
       // Background Terminal Black / Deep Space
-      ctx.fillStyle = '#080A0F';
+      ctx.fillStyle = '#05050A';
       ctx.fillRect(0, 0, w, h);
 
       // Atmospheric Cyan Horizon Halo
       const grad = ctx.createLinearGradient(0, 0, 0, h * 0.45);
       grad.addColorStop(0, isCad ? 'rgba(0, 229, 255, 0.06)' : 'rgba(0, 229, 255, 0.16)');
-      grad.addColorStop(1, 'rgba(8, 10, 15, 0)');
+      grad.addColorStop(1, 'rgba(5, 5, 10, 0)');
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h * 0.45);
 
@@ -860,7 +1140,78 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         ctx.stroke();
       }
 
-      // 3D Building Extrusions around target food POI
+      const cx = w / 2;
+      const cy = h * 0.62;
+      const activeAccent = accentColorRef.current || '#00E5FF';
+
+      // Stage 3 Real Organic Administrative Boundary Polygon
+      ctx.save();
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.15)';
+      ctx.strokeStyle = activeAccent;
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([8, 4]);
+      ctx.beginPath();
+
+      const boundaryFeat = globalDistrictScanRef.current?.boundaryGeoJson;
+      const rawRing =
+        boundaryFeat?.geometry?.type === 'Polygon'
+          ? boundaryFeat.geometry.coordinates[0]
+          : boundaryFeat?.geometry?.type === 'MultiPolygon'
+            ? boundaryFeat.geometry.coordinates[0]?.[0]
+            : null;
+
+      if (rawRing && rawRing.length >= 4) {
+        let minX = Infinity,
+          maxX = -Infinity,
+          minY = Infinity,
+          maxY = -Infinity;
+        for (const pt of rawRing) {
+          if (pt[0] < minX) minX = pt[0];
+          if (pt[0] > maxX) maxX = pt[0];
+          if (pt[1] < minY) minY = pt[1];
+          if (pt[1] > maxY) maxY = pt[1];
+        }
+        const spanX = Math.max(0.005, maxX - minX);
+        const spanY = Math.max(0.005, maxY - minY);
+        const midX = (minX + maxX) / 2;
+        const midY = (minY + maxY) / 2;
+
+        rawRing.forEach((pt, idx) => {
+          const px = cx + ((pt[0] - midX) / spanX) * 440;
+          const py = cy - ((pt[1] - midY) / spanY) * 210;
+          if (idx === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+      } else {
+        const organicPoints: [number, number][] = [
+          [-210, -75],
+          [-145, -98],
+          [-65, -92],
+          [25, -108],
+          [115, -94],
+          [195, -68],
+          [238, -18],
+          [224, 42],
+          [246, 88],
+          [182, 114],
+          [94, 106],
+          [12, 118],
+          [-84, 108],
+          [-168, 115],
+          [-228, 74],
+          [-242, 12],
+        ];
+        organicPoints.forEach(([dx, dy], idx) => {
+          if (idx === 0) ctx.moveTo(cx + dx, cy + dy);
+          else ctx.lineTo(cx + dx, cy + dy);
+        });
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      // Stage 4 Enhanced 3D Building Extrusions (#0D1017 base with #1A233A building tops)
       const blocks = [
         { dx: -190, dy: 40, bw: 54, bh: 68 },
         { dx: -115, dy: -20, bw: 48, bh: 92 },
@@ -869,37 +1220,21 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         { dx: -65, dy: 70, bw: 44, bh: 52 },
         { dx: 60, dy: 78, bw: 50, bh: 58 },
       ];
-      const cx = w / 2;
-      const cy = h * 0.58;
 
       blocks.forEach((b) => {
         const bx = cx + b.dx;
         const by = cy + b.dy;
         const roofOffset = b.bh * (cam.pitch / 72);
-        ctx.fillStyle = isCad ? 'rgba(16, 24, 36, 0.92)' : 'rgba(13, 16, 23, 0.88)';
+        const topY = by - roofOffset;
+        const bGrad = ctx.createLinearGradient(bx, topY, bx, topY + b.bh);
+        bGrad.addColorStop(0, '#1A233A');
+        bGrad.addColorStop(1, '#0D1017');
+        ctx.fillStyle = bGrad;
         ctx.strokeStyle = isCad ? 'rgba(0, 229, 255, 0.55)' : 'rgba(31, 31, 46, 1)';
         ctx.lineWidth = 1;
-        ctx.fillRect(bx, by - roofOffset, b.bw, b.bh);
-        ctx.strokeRect(bx, by - roofOffset, b.bw, b.bh);
+        ctx.fillRect(bx, topY, b.bw, b.bh);
+        ctx.strokeRect(bx, topY, b.bw, b.bh);
       });
-
-      const activeAccent = accentColorRef.current || '#00E5FF';
-
-      // Global District Administrative Boundary Polygon
-      ctx.save();
-      ctx.fillStyle = `${activeAccent}1F`;
-      ctx.strokeStyle = activeAccent;
-      ctx.lineWidth = 2;
-      ctx.setLineDash([8, 4]);
-      ctx.beginPath();
-      ctx.moveTo(cx - 210, cy - 85);
-      ctx.lineTo(cx + 215, cy - 95);
-      ctx.lineTo(cx + 250, cy + 105);
-      ctx.lineTo(cx - 235, cy + 110);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-      ctx.restore();
 
       // Spatial Coaxial Laser Route (Dynamic Brand Accent Color: 12px outer glow + 2.5px core stream)
       ctx.save();
@@ -924,41 +1259,74 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       ctx.stroke();
       ctx.restore();
 
-      // Target Food POI Pulse Ring & Crosshair Lock
-      const pulseRadius = 14 + Math.sin(elapsed * 4.5) * 5;
-      ctx.strokeStyle = activeAccent;
-      ctx.lineWidth = 2;
+      // Stage 4 Pulsing Neon Venue Beacon: Ground Radar Rings + Vertical Cyan Laser Column
+      const pulsePhase1 = (elapsed * 0.85) % 1;
+      const pulsePhase2 = (elapsed * 0.85 + 0.5) % 1;
+
+      [pulsePhase1, pulsePhase2].forEach((phase) => {
+        const radius = 10 + phase * 38;
+        ctx.save();
+        ctx.strokeStyle = '#00E5FF';
+        ctx.fillStyle = `rgba(0, 229, 255, ${(1 - phase) * 0.22})`;
+        ctx.globalAlpha = 1 - phase;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, radius, radius * 0.55, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      // Vertical Cyan Laser Light Column extending upwards from venue pin
+      const laserHeight = 115;
+      ctx.save();
+      const laserGlow = ctx.createLinearGradient(cx, cy - laserHeight, cx, cy);
+      laserGlow.addColorStop(0, 'rgba(0, 229, 255, 0.15)');
+      laserGlow.addColorStop(0.65, '#00E5FF');
+      laserGlow.addColorStop(1, '#FFFFFF');
+      ctx.strokeStyle = laserGlow;
+      ctx.shadowColor = '#00E5FF';
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 3.5;
       ctx.beginPath();
-      ctx.arc(cx, cy, pulseRadius, 0, Math.PI * 2);
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx, cy - laserHeight);
       ctx.stroke();
+      ctx.restore();
 
-      ctx.fillStyle = '#00E676';
+      // Center Pin Lock Core
+      ctx.fillStyle = '#FFFFFF';
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 2;
       ctx.fillRect(cx - 4, cy - 4, 8, 8);
+      ctx.strokeRect(cx - 4, cy - 4, 8, 8);
 
-      // Render Brutalist Marker HUD Tag: [ 01 // POI ] <VENUE_NAME_UPPERCASE>
+      // Render Stage 4 HUD Label: [ 📍 TARGET LOCKED // <VENUE_NAME_UPPERCASE> ]
       const activePoiTarget = targetPoiRef.current;
-      const tagText = `[ 01 // POI ] ${(activePoiTarget.name || 'FOOD_POI').toUpperCase()}`;
+      const venueUpper = (activePoiTarget.name || 'FOOD_POI').toUpperCase();
+      const fullTag = `[ 📍 TARGET LOCKED // ${venueUpper} ]`;
       ctx.font = 'bold 11px "JetBrains Mono", monospace';
-      const textWidth = ctx.measureText(tagText).width;
-      const boxW = textWidth + 20;
-      const boxH = 26;
+      const textWidth = ctx.measureText(fullTag).width;
+      const boxW = textWidth + 24;
+      const boxH = 28;
       const boxX = cx - boxW / 2;
-      const boxY = cy - 42;
+      const boxY = cy - laserHeight - boxH - 4;
 
-      ctx.fillStyle = '#080A0F';
+      ctx.fillStyle = '#05050A';
       ctx.fillRect(boxX, boxY, boxW, boxH);
-      ctx.strokeStyle = activeAccent;
+      ctx.strokeStyle = '#00E5FF';
       ctx.lineWidth = 1.5;
       ctx.strokeRect(boxX, boxY, boxW, boxH);
 
-      ctx.fillStyle = activeAccent;
-      ctx.fillText('[ 01 // POI ]', boxX + 10, boxY + 17);
+      ctx.fillStyle = '#00E5FF';
+      const prefix = '[ 📍 TARGET LOCKED // ';
+      ctx.fillText(prefix, boxX + 12, boxY + 18);
+      const prefixW = ctx.measureText(prefix).width;
       ctx.fillStyle = '#FFFFFF';
-      ctx.fillText(
-        ` ${(activePoiTarget.name || 'FOOD_POI').toUpperCase()}`,
-        boxX + 10 + ctx.measureText('[ 01 // POI ]').width,
-        boxY + 17
-      );
+      ctx.fillText(venueUpper, boxX + 12 + prefixW, boxY + 18);
+      const venueW = ctx.measureText(venueUpper).width;
+      ctx.fillStyle = '#00E5FF';
+      ctx.fillText(' ]', boxX + 12 + prefixW + venueW, boxY + 18);
 
       rafId = requestAnimationFrame(renderFrame);
     };
@@ -1181,11 +1549,11 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
             </button>
           </div>
 
-          {/* Active Venue Pill (Bottom-Left) */}
-          <div className="absolute bottom-3 left-3 bg-[#0D0E17]/95 border border-[#1F1F2E] px-3 py-1.5 flex items-center gap-2 font-mono text-xs font-bold pointer-events-auto rounded-none">
-            <MapPin className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
-            <span className="text-[#00E5FF]">[ 01 // POI ]</span>
+          {/* Active Venue Target Lock HUD Label (Bottom-Left) */}
+          <div className="absolute bottom-3 left-3 bg-[#0D0E17]/95 border border-[#00E5FF]/60 px-3 py-1.5 flex items-center gap-1.5 font-mono text-xs font-bold pointer-events-auto rounded-none shadow-[0_0_12px_rgba(0,229,255,0.2)]">
+            <span className="text-[#00E5FF]">[ 📍 TARGET LOCKED //</span>
             <span className="text-white">{targetDisplayPoi.name.toUpperCase()}</span>
+            <span className="text-[#00E5FF]">]</span>
           </div>
 
           {/* Consolidated Bottom-Center Chiseled 45° "Pin POI" Action Button */}

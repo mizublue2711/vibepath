@@ -123,8 +123,31 @@ export class MapModeController {
       });
 
       if (map.getLayer('3d-buildings')) {
-        map.setPaintProperty('3d-buildings', 'fill-extrusion-color', preset.buildingColor);
+        map.setPaintProperty('3d-buildings', 'fill-extrusion-color', [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          12,
+          '#0D1017',
+          15,
+          [
+            'interpolate',
+            ['linear'],
+            ['coalesce', ['get', 'height'], 15],
+            0,
+            '#0D1017',
+            60,
+            '#1A233A',
+          ],
+        ]);
         map.setPaintProperty('3d-buildings', 'fill-extrusion-opacity', preset.buildingOpacity);
+        try {
+          map.setPaintProperty(
+            '3d-buildings',
+            'fill-extrusion-ambient-occlusion-intensity' as any,
+            0.4
+          );
+        } catch (_) {}
       }
 
       if (map.getLayer('3d-buildings-cad-wireframe')) {

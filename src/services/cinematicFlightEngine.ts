@@ -1,7 +1,20 @@
 import mapboxgl from 'mapbox-gl';
 import { VideoRecorder } from './videoRecorder';
-import { ApiKeyManager } from './apiKeyManager';
 import { getStoredThemeConfig } from '../context/ThemeContext';
+import {
+  GlobalBoundaryService,
+  GlobalDistrictResolution,
+  GLOBAL_BOUNDARIES_SOURCE_ID,
+  GLOBAL_DISTRICT_FILL_LAYER_ID,
+  GLOBAL_DISTRICT_STROKE_LAYER_ID,
+} from './globalBoundaryService';
+
+export {
+  GLOBAL_BOUNDARIES_SOURCE_ID,
+  GLOBAL_DISTRICT_FILL_LAYER_ID,
+  GLOBAL_DISTRICT_STROKE_LAYER_ID,
+};
+export type { GlobalDistrictResolution };
 
 export type CinematicFlightStage =
   | 'IDLE'
@@ -10,13 +23,6 @@ export type CinematicFlightStage =
   | 'DISTRICT_FOCUS'
   | 'STREET_FLYOVER'
   | 'LOCKED';
-
-export interface GlobalDistrictResolution {
-  mapboxId: string;
-  districtName: string;
-  countryCode: string;
-  hudReadout: string; // Clean readable district format: e.g. "District 1, Ben Thanh"
-}
 
 export interface FlightStageUpdate {
   stage: CinematicFlightStage;
@@ -42,54 +48,6 @@ export interface CinematicFlightOptions {
     sizeBytes: number;
     durationMs: number;
   } | null) => void;
-}
-
-export const GLOBAL_BOUNDARIES_SOURCE_ID = 'mapbox-global-boundaries';
-export const GLOBAL_DISTRICT_FILL_LAYER_ID = 'global-district-fill';
-export const GLOBAL_DISTRICT_STROKE_LAYER_ID = 'global-district-stroke';
-
-const DYNAMIC_BOUNDARY_SOURCE_ID = 'vibepath-global-adm2-dynamic';
-const DYNAMIC_BOUNDARY_FILL_ID = 'vibepath-global-adm2-fill';
-const DYNAMIC_BOUNDARY_STROKE_ID = 'vibepath-global-adm2-stroke';
-
-function buildAdministrativeBoundaryFeature(
-  lng: number,
-  lat: number,
-  resolution: GlobalDistrictResolution
-) {
-  const vertices = 10;
-  const baseRadiusLng = 0.0105;
-  const baseRadiusLat = 0.0082;
-  const ring: [number, number][] = [];
-
-  let seed = 0;
-  for (let i = 0; i < resolution.mapboxId.length; i++) {
-    seed = (seed * 31 + resolution.mapboxId.charCodeAt(i)) % 997;
-  }
-
-  for (let i = 0; i < vertices; i++) {
-    const angle = (i / vertices) * Math.PI * 2;
-    const variance = 0.82 + (((seed + i * 37) % 35) / 100);
-    const ptLng = Number((lng + Math.cos(angle) * baseRadiusLng * variance).toFixed(6));
-    const ptLat = Number((lat + Math.sin(angle) * baseRadiusLat * variance).toFixed(6));
-    ring.push([ptLng, ptLat]);
-  }
-  if (ring.length > 0) {
-    ring.push(ring[0]);
-  }
-
-  return {
-    type: 'Feature' as const,
-    properties: {
-      mapbox_id: resolution.mapboxId,
-      name: resolution.districtName,
-      iso_3166_1: resolution.countryCode,
-    },
-    geometry: {
-      type: 'Polygon' as const,
-      coordinates: [ring],
-    },
-  };
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -143,90 +101,14 @@ export class CinematicFlightEngine {
   }
 
   /**
-   * Resolve clean District label (e.g. "District 1, Ben Thanh") for the top status bar
+   * Resolve clean District label and real administrative boundary polygon via GlobalBoundaryService
    */
   static async resolveGlobalDistrict(
     map: mapboxgl.Map | null,
     lng: number,
     lat: number
   ): Promise<GlobalDistrictResolution> {
-    // Default Saigon District 1 check for central HCMC coordinates
-    if (lat >= 10.74 && lat <= 10.82 && lng >= 106.66 && lng <= 106.73) {
-      return {
-        mapboxId: 'dXJuOm1ieGJuZDo2ODg0Njp2NA',
-        districtName: 'District 1, Ben Thanh',
-        countryCode: 'VN',
-        hudReadout: 'District 1, Ben Thanh',
-      };
-    }
-
-    if (map) {
-      try {
-        if (map.getLayer(GLOBAL_DISTRICT_FILL_LAYER_ID)) {
-          const screenPt = map.project([lng, lat]);
-          const features = map.queryRenderedFeatures(screenPt, {
-            layers: [GLOBAL_DISTRICT_FILL_LAYER_ID],
-          });
-          if (features && features.length > 0) {
-            const props = features[0].properties || {};
-            const mapboxId = String(
-              props.mapbox_id || features[0].id || `adm2-${lat.toFixed(3)}-${lng.toFixed(3)}`
-            );
-            const districtName = String(props.name_en || props.name || 'District 1, Ben Thanh');
-            const countryCode = String(props.iso_3166_1 || 'VN').toUpperCase();
-            return {
-              mapboxId,
-              districtName,
-              countryCode,
-              hudReadout: `${districtName}, ${countryCode}`,
-            };
-          }
-        }
-      } catch (_) {}
-    }
-
-    const token = (
-      ApiKeyManager.getMapKey() ||
-      (import.meta as any).env?.VITE_MAPBOX_TOKEN ||
-      ''
-    ).trim();
-
-    if (token.startsWith('pk.') && !token.includes('xxxxxxxx') && token.length >= 32) {
-      try {
-        const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?types=district,locality,place&limit=1&access_token=${encodeURIComponent(
-          token
-        )}`;
-        const resp = await fetch(url);
-        if (resp.ok) {
-          const data = await resp.json();
-          const feat = data?.features?.[0];
-          if (feat) {
-            const districtName = String(feat.text_en || feat.text || 'District 1, Ben Thanh');
-            const countryCtx = Array.isArray(feat.context)
-              ? feat.context.find((c: any) => String(c.id || '').startsWith('country'))
-              : null;
-            const countryCode = String(countryCtx?.short_code || 'VN').toUpperCase();
-            const mapboxId = String(
-              feat.properties?.mapbox_id || feat.id || `adm2-${lng}-${lat}`
-            );
-
-            return {
-              mapboxId,
-              districtName,
-              countryCode,
-              hudReadout: `${districtName}, ${countryCode}`,
-            };
-          }
-        }
-      } catch (_) {}
-    }
-
-    return {
-      mapboxId: `adm2-global-${lat.toFixed(3)}-${lng.toFixed(3)}`,
-      districtName: 'District 1, Ben Thanh',
-      countryCode: 'VN',
-      hudReadout: 'District 1, Ben Thanh',
-    };
+    return GlobalBoundaryService.resolveGlobalDistrict(map, lng, lat);
   }
 
   static applyGlobalDistrictBoundaryFilter(
@@ -235,96 +117,12 @@ export class CinematicFlightEngine {
     lat: number,
     resolution: GlobalDistrictResolution
   ): void {
-    const activeMapboxId = resolution.mapboxId;
-    const filterExpr: any = ['==', ['get', 'mapbox_id'], activeMapboxId];
-    const accentColor = getStoredThemeConfig().accentColor || '#00E5FF';
-
-    try {
-      if (map.getLayer(GLOBAL_DISTRICT_FILL_LAYER_ID)) {
-        map.setFilter(GLOBAL_DISTRICT_FILL_LAYER_ID, filterExpr);
-        map.setPaintProperty(GLOBAL_DISTRICT_FILL_LAYER_ID, 'fill-color', accentColor);
-        map.setPaintProperty(GLOBAL_DISTRICT_FILL_LAYER_ID, 'fill-opacity', 0.12);
-      }
-      if (map.getLayer(GLOBAL_DISTRICT_STROKE_LAYER_ID)) {
-        map.setFilter(GLOBAL_DISTRICT_STROKE_LAYER_ID, filterExpr);
-        map.setPaintProperty(GLOBAL_DISTRICT_STROKE_LAYER_ID, 'line-color', accentColor);
-        map.setPaintProperty(GLOBAL_DISTRICT_STROKE_LAYER_ID, 'line-width', 2);
-        map.setPaintProperty(GLOBAL_DISTRICT_STROKE_LAYER_ID, 'line-dasharray', [3, 1.5]);
-      }
-    } catch (_) {}
-
-    try {
-      const feature = buildAdministrativeBoundaryFeature(lng, lat, resolution);
-      const existingSource = map.getSource(DYNAMIC_BOUNDARY_SOURCE_ID) as
-        | mapboxgl.GeoJSONSource
-        | undefined;
-
-      if (existingSource) {
-        existingSource.setData(feature);
-      } else {
-        map.addSource(DYNAMIC_BOUNDARY_SOURCE_ID, {
-          type: 'geojson',
-          data: feature,
-        });
-      }
-
-      if (!map.getLayer(DYNAMIC_BOUNDARY_FILL_ID)) {
-        map.addLayer({
-          id: DYNAMIC_BOUNDARY_FILL_ID,
-          type: 'fill',
-          source: DYNAMIC_BOUNDARY_SOURCE_ID,
-          filter: filterExpr,
-          paint: {
-            'fill-color': accentColor,
-            'fill-opacity': 0.12,
-          },
-        });
-      } else {
-        map.setFilter(DYNAMIC_BOUNDARY_FILL_ID, filterExpr);
-        map.setPaintProperty(DYNAMIC_BOUNDARY_FILL_ID, 'fill-color', accentColor);
-      }
-
-      if (!map.getLayer(DYNAMIC_BOUNDARY_STROKE_ID)) {
-        map.addLayer({
-          id: DYNAMIC_BOUNDARY_STROKE_ID,
-          type: 'line',
-          source: DYNAMIC_BOUNDARY_SOURCE_ID,
-          filter: filterExpr,
-          layout: {
-            'line-join': 'miter',
-            'line-cap': 'butt',
-          },
-          paint: {
-            'line-color': accentColor,
-            'line-width': 2,
-            'line-dasharray': [3, 1.5],
-            'line-opacity': 1.0,
-          },
-        });
-      } else {
-        map.setFilter(DYNAMIC_BOUNDARY_STROKE_ID, filterExpr);
-        map.setPaintProperty(DYNAMIC_BOUNDARY_STROKE_ID, 'line-color', accentColor);
-      }
-    } catch (_) {}
+    GlobalBoundaryService.applyStage3BoundaryHighlight(map, lng, lat, resolution);
   }
 
   static clearGlobalDistrictFilter(map: mapboxgl.Map): void {
     this.stopScannerPulse();
-    const emptyFilter: any = ['==', ['get', 'mapbox_id'], '__NONE__'];
-    try {
-      if (map.getLayer(GLOBAL_DISTRICT_FILL_LAYER_ID)) {
-        map.setFilter(GLOBAL_DISTRICT_FILL_LAYER_ID, emptyFilter);
-      }
-      if (map.getLayer(GLOBAL_DISTRICT_STROKE_LAYER_ID)) {
-        map.setFilter(GLOBAL_DISTRICT_STROKE_LAYER_ID, emptyFilter);
-      }
-      if (map.getLayer(DYNAMIC_BOUNDARY_FILL_ID)) {
-        map.setFilter(DYNAMIC_BOUNDARY_FILL_ID, emptyFilter);
-      }
-      if (map.getLayer(DYNAMIC_BOUNDARY_STROKE_ID)) {
-        map.setFilter(DYNAMIC_BOUNDARY_STROKE_ID, emptyFilter);
-      }
-    } catch (_) {}
+    GlobalBoundaryService.clearBoundaryHighlight(map);
   }
 
   private static createFallbackTelemetryCanvas(
