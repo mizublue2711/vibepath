@@ -172,6 +172,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
 
   const [activeMode, setActiveMode] = useState<UnifiedMapMode>('DEM_3D');
   const activeModeRef = useRef<UnifiedMapMode>('DEM_3D');
+  const [mapMode, setMapModeState] = useState<'terrain' | 'cad' | 'orbit' | 'flyover'>('terrain');
 
   const [selectedSearchPoi, setSelectedSearchPoi] = useState<{
     latitude: number;
@@ -274,6 +275,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       MapModeController.switchMode(mapRef.current, newMode);
     }
   }, []);
+
 
   /**
    * Stage 4 Upgrade: Mount Pulsing Cyberpunk Neon Venue Beacon + Ground Radar Ring + Vertical Cyan Laser Column
@@ -720,6 +722,45 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     return () => {
       window.removeEventListener('vibepath_trigger_cinematic_render', handleTriggerEvent);
     };
+  }, [runCinematicSequence]);
+
+  const handleSetOrbitView = useCallback(() => {
+    CinematicFlightEngine.stopActiveFlight(mapRef.current);
+    setFlightStatus(null);
+    animCameraRef.current.targetZoom = 1.8;
+    animCameraRef.current.targetPitch = 0;
+    animCameraRef.current.targetBearing = 0;
+    setCameraTelemetry({ zoom: 1.8, pitch: 0, bearing: 0 });
+    if (mapRef.current) {
+      mapRef.current.flyTo({
+        center: [targetDisplayPoi.longitude, targetDisplayPoi.latitude],
+        zoom: 1.8,
+        pitch: 0,
+        bearing: 0,
+        speed: 1.2,
+        essential: true,
+      });
+    }
+  }, [targetDisplayPoi]);
+
+  const setMapMode = useCallback(
+    (mode: 'terrain' | 'cad' | 'orbit' | 'flyover') => {
+      setMapModeState(mode);
+      if (mode === 'terrain') {
+        handleSwitchMode('DEM_3D');
+      } else if (mode === 'cad') {
+        handleSwitchMode('CAD_3D');
+      } else if (mode === 'orbit') {
+        handleSetOrbitView();
+      } else if (mode === 'flyover') {
+        runCinematicSequence(false);
+      }
+    },
+    [handleSwitchMode, handleSetOrbitView, runCinematicSequence]
+  );
+
+  const triggerRenderEngine = useCallback(() => {
+    runCinematicSequence(true);
   }, [runCinematicSequence]);
 
   const mountBrutalistMarkers = useCallback(
@@ -1468,85 +1509,76 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
             </span>
           </div>
 
-          {/* Single Horizontal Glassmorphic Toolbar Pinned to Top-Right of Map Canvas */}
-          <div
-            role="toolbar"
-            aria-label="Map Viewport Controls"
-            className="absolute top-3 right-3 bg-[#0D0E17]/90 backdrop-blur-md border border-[#1F1F2E] p-1 flex flex-wrap items-center gap-1 pointer-events-auto rounded-none"
-          >
-            <button
-              type="button"
-              onClick={() => handleSwitchMode('DEM_3D')}
-              className={`min-h-[32px] px-2.5 bg-[#0D0E17] border font-mono text-[11px] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all rounded-none whitespace-nowrap ${
-                activeMode === 'DEM_3D'
-                  ? 'border-[#00E5FF] text-[#00E5FF] shadow-[0_0_10px_rgba(0,229,255,0.22)]'
-                  : 'border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)]'
-              }`}
-            >
-              <CheckCircle2 className="w-3 h-3 shrink-0" />
-              <span>[3D Terrain]</span>
-            </button>
+          {/* Toolbar Pinned to Top-Right of Map Canvas */}
+          <div className="absolute top-3 right-3 pointer-events-auto">
+            <div className="flex items-center gap-3 bg-[#05050A]/90 p-1.5 border border-[#1F1F2E] backdrop-blur-md">
+              {/* CỤM 1: VIEWPORT MODE SELECTOR (Segmented Controls) */}
+              <div className="flex items-center border border-[#1F1F2E]">
+                <button
+                  onClick={() => setMapMode('terrain')}
+                  className={`px-3 py-1.5 font-mono text-xs flex items-center gap-1.5 transition-colors ${
+                    mapMode === 'terrain'
+                      ? 'bg-[#00E5FF]/10 text-[#00E5FF] border-r border-[#00E5FF]'
+                      : 'bg-[#0D0E17] text-[#8A8FA3] hover:text-white border-r border-[#1F1F2E]'
+                  }`}
+                >
+                  <span className="text-[10px]">{mapMode === 'terrain' ? '●' : '○'}</span>
+                  [3D TERRAIN]
+                </button>
 
-            <button
-              type="button"
-              onClick={() => handleSwitchMode('CAD_3D')}
-              className={`min-h-[32px] px-2.5 bg-[#0D0E17] border font-mono text-[11px] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all rounded-none whitespace-nowrap ${
-                activeMode === 'CAD_3D'
-                  ? 'border-[#00E5FF] text-[#00E5FF] shadow-[0_0_10px_rgba(0,229,255,0.22)]'
-                  : 'border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)]'
-              }`}
-            >
-              <Layers className="w-3 h-3 shrink-0" />
-              <span>[Volumetric CAD]</span>
-            </button>
+                <button
+                  onClick={() => setMapMode('cad')}
+                  className={`px-3 py-1.5 font-mono text-xs flex items-center gap-1.5 transition-colors ${
+                    mapMode === 'cad'
+                      ? 'bg-[#00E5FF]/10 text-[#00E5FF] border-r border-[#00E5FF]'
+                      : 'bg-[#0D0E17] text-[#8A8FA3] hover:text-white border-r border-[#1F1F2E]'
+                  }`}
+                >
+                  <span className="text-[10px]">⏣</span>
+                  [VOLUMETRIC CAD]
+                </button>
 
-            <button
-              type="button"
-              onClick={() => {
-                CinematicFlightEngine.stopActiveFlight(mapRef.current);
-                setFlightStatus(null);
-                animCameraRef.current.targetZoom = 1.8;
-                animCameraRef.current.targetPitch = 0;
-                animCameraRef.current.targetBearing = 0;
-                setCameraTelemetry({ zoom: 1.8, pitch: 0, bearing: 0 });
-                if (mapRef.current) {
-                  mapRef.current.flyTo({
-                    center: [targetDisplayPoi.longitude, targetDisplayPoi.latitude],
-                    zoom: 1.8,
-                    pitch: 0,
-                    bearing: 0,
-                    speed: 1.2,
-                    essential: true,
-                  });
-                }
-              }}
-              className="min-h-[32px] px-2.5 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)] font-mono text-[11px] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all rounded-none whitespace-nowrap"
-            >
-              <Compass className="w-3.5 h-3.5 shrink-0" />
-              <span>[Orbit View]</span>
-            </button>
+                <button
+                  onClick={() => setMapMode('orbit')}
+                  className={`px-3 py-1.5 font-mono text-xs flex items-center gap-1.5 transition-colors ${
+                    mapMode === 'orbit'
+                      ? 'bg-[#00E5FF]/10 text-[#00E5FF] border-r border-[#00E5FF]'
+                      : 'bg-[#0D0E17] text-[#8A8FA3] hover:text-white border-r border-[#1F1F2E]'
+                  }`}
+                >
+                  <span className="text-[10px]">◎</span>
+                  [ORBIT VIEW]
+                </button>
 
-            <button
-              type="button"
-              onClick={() => runCinematicSequence(false)}
-              className="min-h-[32px] px-2.5 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)] font-mono text-[11px] uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all rounded-none whitespace-nowrap"
-            >
-              <Rocket className="w-3.5 h-3.5 shrink-0" />
-              <span>[Flyover]</span>
-            </button>
+                <button
+                  onClick={() => setMapMode('flyover')}
+                  className={`px-3 py-1.5 font-mono text-xs flex items-center gap-1.5 transition-colors ${
+                    mapMode === 'flyover'
+                      ? 'bg-[#00E5FF]/10 text-[#00E5FF]'
+                      : 'bg-[#0D0E17] text-[#8A8FA3] hover:text-white'
+                  }`}
+                >
+                  <span className="text-[10px]">▲</span>
+                  [FLYOVER]
+                </button>
+              </div>
 
-            <button
-              type="button"
-              onClick={() => runCinematicSequence(true)}
-              className="min-h-[32px] px-3 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)] font-mono text-[11px] uppercase tracking-wider font-bold flex items-center gap-1.5 cursor-pointer transition-all rounded-none whitespace-nowrap"
-            >
-              <Film className="w-3.5 h-3.5 shrink-0" />
-              <span>
-                {flightStatus?.isRecording
-                  ? 'Recording 60FPS...'
-                  : 'Render 60FPS Video'}
-              </span>
-            </button>
+              {/* ĐƯỜNG CHIA KỸ THUẬT 1PX */}
+              <div className="h-5 w-[1px] bg-[#2D2D44]" />
+
+              {/* CỤM 2: MASTER CTA TRIGGER (Luôn nổi bật với vệt cắt 45 độ) */}
+              <button
+                onClick={triggerRenderEngine}
+                className="group relative px-4 py-1.5 bg-[#5322FF] text-white font-mono text-xs font-semibold tracking-wider flex items-center gap-2 border border-[#00E5FF] hover:bg-[#00E5FF] hover:text-[#05050A] transition-all duration-150"
+                style={{
+                  clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))'
+                }}
+              >
+                <span className="w-1.5 h-1.5 bg-[#00FF66] animate-pulse group-hover:bg-[#05050A]" />
+                <span>&gt; RENDER 60FPS VIDEO</span>
+                <span className="text-[10px] text-[#00E5FF] group-hover:text-[#05050A] opacity-80">[4K]</span>
+              </button>
+            </div>
           </div>
 
           {/* Active Venue Target Lock HUD Label (Bottom-Left) */}
