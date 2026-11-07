@@ -575,13 +575,11 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
         address,
       });
 
-      // Animate built-in 3D renderer camera target
-      animCameraRef.current.zoom = 9.5;
-      animCameraRef.current.pitch = 35;
+      // Animate built-in 3D renderer camera target at ground level
       animCameraRef.current.targetLng = cleanLng;
       animCameraRef.current.targetLat = cleanLat;
-      animCameraRef.current.targetZoom = 17.5;
-      animCameraRef.current.targetPitch = 72;
+      animCameraRef.current.targetZoom = 16;
+      animCameraRef.current.targetPitch = 45;
       animCameraRef.current.targetBearing = 40;
 
       if (onPickCoordinateRef.current) {
@@ -617,15 +615,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       try {
         mountTargetRadarBeacon(map, cleanLng, cleanLat, displayLabel);
 
-        map.flyTo({
-          center: [cleanLng, cleanLat],
-          zoom: 17.5,
-          pitch: 72,
-          bearing: 40,
-          speed: 1.35,
-          curve: 1.4,
-          essential: true,
-        });
+        CinematicFlightEngine.glideToGroundLocation(map, cleanLng, cleanLat, 1200);
       } catch (_) {}
     },
     [mountTargetRadarBeacon]
@@ -1497,27 +1487,39 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
     } catch (_) {}
   }, [foodPois, activePoi, mapReady, mountBrutalistMarkers]);
 
-  // Sync activePoi changes from parent list
+  // Sync activePoi changes from parent list (Low-altitude ground glide, decoupled from Space Orbit sequence)
   useEffect(() => {
     if (!activePoi) return;
     setSelectedSearchPoi(null);
     animCameraRef.current.targetLng = activePoi.longitude;
     animCameraRef.current.targetLat = activePoi.latitude;
-    animCameraRef.current.targetZoom = 17.5;
-    animCameraRef.current.targetPitch = 72;
+    animCameraRef.current.targetZoom = 16;
+    animCameraRef.current.targetPitch = 45;
     animCameraRef.current.targetBearing = 40;
 
     if (!mapReady || isRecordingRef.current) return;
     if (mapRef.current) {
-      runCinematicSequence(false);
+      CinematicFlightEngine.glideToGroundLocation(
+        mapRef.current,
+        activePoi.longitude,
+        activePoi.latitude,
+        1200
+      );
+      mountTargetRadarBeacon(
+        mapRef.current,
+        activePoi.longitude,
+        activePoi.latitude,
+        activePoi.name
+      );
     }
   }, [
     activePoi?.poi_id,
     activePoi?.latitude,
     activePoi?.longitude,
+    activePoi?.name,
     autoTriggerKey,
     mapReady,
-    runCinematicSequence,
+    mountTargetRadarBeacon,
   ]);
 
   const handleSelectSearchLocation = (result: GeocodedPoiResult) => {
