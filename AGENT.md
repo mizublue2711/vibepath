@@ -140,3 +140,20 @@ Before committing code, AI Workers MUST verify:
 [ ] CyberGlobe3D.tsx maintains canvas sizing across window resizes via map.resize().
 [ ] Search functionality returns valid coordinates for both global landmarks and local Vietnamese food stalls.
 [ ] All file modifications update the exact paths specified in Section 1 of this document.
+_________________________________________________
+
+6. Internationalization (i18n) & Dual-Locale Enforcement Rules
+
+All AI Workers (Jules, Cursor, Claude Code) MUST strictly comply with the following localization protocol:
+
+#1. **Zero Hardcoded Strings in JSX (Mandatory)**:
+   - Hardcoding raw text strings directly inside React component JSX files (e.g. `Navigation.tsx`, `PoiSearchBox.tsx`, `TargetPinningTerminal.tsx`, `EditorStudio/*`) is STRICTLY PROHIBITED.
+   - All UI labels, bracket titles, button text, HUD badges, input placeholders, tooltips, and modal descriptions MUST be managed centrally inside `src/locales/vi.ts` and `src/locales/en.ts`.
+
+#2. **Atomic Dual-Dictionary Synchronous Updates**:
+   - Whenever an AI Worker adds, edits, or refactores any UI text or feature, it MUST update BOTH `src/locales/vi.ts` AND `src/locales/en.ts` in the exact same turn/commit.
+   - Every single key in `vi.ts` MUST have a 1:1 matching key and structure in `en.ts`. No missing or mismatched keys are allowed.
+
+#3. **Dynamic Translation Hook Standard**:
+   - React components MUST subscribe to language changes via `LanguageContext` (or `useTranslation()` hook).
+   - Render UI text dynamically using key lookups: `{t('section.key_name')}` or `locales[lang].section.key_name`.
