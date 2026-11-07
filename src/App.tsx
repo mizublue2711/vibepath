@@ -20,6 +20,7 @@ import {
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { LanguageProvider, useTranslation } from './context/LanguageContext';
 import { LiveTelemetryView } from './components/LiveTelemetryView';
+import { TargetPinningTerminal } from './components/TargetPinningTerminal';
 import { EditorStudioTab } from './components/EditorStudioTab';
 import { FeedbackTab } from './components/FeedbackTab';
 import { BottomNav } from './components/BottomNav';
@@ -64,7 +65,7 @@ function AppContent() {
   }, []);
 
   // Field Route & Culinary Nodes State
-  const [nodes, setNodes] = useState<CulinaryNode[]>(INITIAL_CULINARY_NODES);
+  const [nodes, setNodes] = useState<CulinaryNode[]>([]);
   const [waypoints, setWaypoints] = useState<RouteWaypoint[]>(INITIAL_ROUTE_WAYPOINTS);
   const [isTracking, setIsTracking] = useState<boolean>(true);
   const [activeRiderPos, setActiveRiderPos] = useState<{ lat: number; lng: number }>({
@@ -92,7 +93,7 @@ function AppContent() {
     syncId: 'VP-SYNC-INIT01',
     timestamp: '21:18:10',
     language: 'vi',
-    nodesCount: INITIAL_CULINARY_NODES.length,
+    nodesCount: 0,
     waypointsCount: INITIAL_ROUTE_WAYPOINTS.length,
     payloadSizeKb: 4.68,
     status: 'SYNCED_ATOMIC',
