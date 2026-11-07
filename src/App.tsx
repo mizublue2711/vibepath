@@ -20,6 +20,7 @@ import {
 } from './data/vibePathData';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { LanguageProvider, useTranslation } from './context/LanguageContext';
+import { FlightStateProvider, useFlightState } from './context/FlightStateContext';
 import { LiveTelemetryView } from './components/LiveTelemetryView';
 import { TargetPinningTerminal } from './components/TargetPinningTerminal';
 import { EditorStudioTab } from './components/EditorStudioTab';
@@ -65,8 +66,14 @@ function AppContent() {
     return () => window.removeEventListener('vibepath_apikeys_updated', onKeysUpdated);
   }, []);
 
-  // Field Route & Culinary Nodes State
-  const [nodes, setNodes] = useState<CulinaryNode[]>([]);
+  // FlightStateContext: Session Pinned Locations & LocalStorage Sync
+  const {
+    pinnedLocations: nodes,
+    addPinnedLocation,
+    removePinnedLocation,
+    clearPinnedLocations,
+  } = useFlightState();
+
   const [waypoints, setWaypoints] = useState<RouteWaypoint[]>(INITIAL_ROUTE_WAYPOINTS);
   const [isTracking, setIsTracking] = useState<boolean>(true);
   const [activeRiderPos, setActiveRiderPos] = useState<{ lat: number; lng: number }>({
@@ -94,7 +101,7 @@ function AppContent() {
     syncId: 'VP-SYNC-INIT01',
     timestamp: '21:18:10',
     language: 'vi',
-    nodesCount: 0,
+    nodesCount: nodes.length,
     waypointsCount: INITIAL_ROUTE_WAYPOINTS.length,
     payloadSizeKb: 4.68,
     status: 'SYNCED_ATOMIC',
@@ -179,30 +186,21 @@ function AppContent() {
   // Add new Culinary Node
   const handleAddNode = useCallback(
     (newNodeData: Omit<CulinaryNode, 'id' | 'timestamp' | 'timecodeSeconds'>) => {
-      setNodes((prev) => {
-        const lastEndSec =
-          prev.length > 0
-            ? prev[prev.length - 1].timecodeSeconds + prev[prev.length - 1].durationSeconds
-            : 0;
-        const created: CulinaryNode = {
-          ...newNodeData,
-          id: `poi-${Date.now().toString(36)}`,
-          timestamp: new Date().toLocaleTimeString('en-GB', { hour12: false }),
-          timecodeSeconds: lastEndSec,
-        };
-        return [...prev, created];
-      });
+      addPinnedLocation(newNodeData);
     },
-    []
+    [addPinnedLocation]
   );
 
-  const handleDeleteNode = useCallback((id: string) => {
-    setNodes((prev) => prev.filter((n) => n.id !== id));
-  }, []);
+  const handleDeleteNode = useCallback(
+    (id: string) => {
+      removePinnedLocation(id);
+    },
+    [removePinnedLocation]
+  );
 
   const handleClearSession = useCallback(() => {
-    setNodes([]);
-  }, []);
+    clearPinnedLocations();
+  }, [clearPinnedLocations]);
 
   /**
    * Atomic Cloud Sync Handler with 3-Step Visual Progress Stepper & Custom Brand Injection
@@ -611,7 +609,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <AppContent />
+        <FlightStateProvider>
+          <AppContent />
+        </FlightStateProvider>
       </LanguageProvider>
     </ThemeProvider>
   );
