@@ -67,6 +67,12 @@ export const en: LocaleTranslations = {
     pinnedSuccess: 'Pinned',
     defaultPoiPrefix: 'Culinary Spot',
     defaultPoiNote: 'Bold street-side flavor captured fresh on location with verified GPS lock.',
+    clearSession: '[ 🗑️ CLEAR SESSION ]',
+    clearSessionConfirm: 'Are you sure you want to clear all pinned locations in this session?',
+    emptyPoiState: '[ 📍 CHƯA CÓ ĐIỂM GHIM • CHỌN ĐỊA ĐIỂM BÊN TRÁI ĐỂ BẮT ĐẦU ]',
+    removePoiChip: 'Remove pinned POI',
+    activeChipLabel: 'ACTIVE_POI',
+    pinnedHistoryLabel: 'PINNED_HISTORY',
   },
   studio: {
     studioHeader: '[ VIBEPATH // NLE_ASSET_STUDIO ]',
