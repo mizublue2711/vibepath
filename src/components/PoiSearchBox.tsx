@@ -7,6 +7,7 @@ import { Search, Crosshair, CornerDownLeft, X, Link2, Loader2 } from 'lucide-rea
 export interface SearchResult {
   id: string;
   name: string;
+  place_name?: string;
   address: string;
   fullAddress: string;
   coordinates: [number, number]; // [longitude, latitude]
@@ -22,6 +23,15 @@ export interface PoiSearchBoxProps {
   language?: LanguageCode;
   placeholder?: string;
   compact?: boolean;
+}
+
+function normalizeVietnameseText(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .trim();
 }
 
 export function parseMapboxSearchBox(suggestions: any[]): SearchResult[] {
@@ -63,6 +73,7 @@ export function parseMapboxSearchBox(suggestions: any[]): SearchResult[] {
       return {
         id: String(props.mapbox_id || item.id || `mapbox-searchbox-${idx}`),
         name,
+        place_name: address,
         address,
         fullAddress: address,
         coordinates: [longitude, latitude],
@@ -100,6 +111,7 @@ export function parseMapboxGeocoding(features: any[]): SearchResult[] {
       return {
         id: String(feature.id || `mapbox-geocoding-${idx}`),
         name,
+        place_name: address,
         address,
         fullAddress: address,
         coordinates: [longitude, latitude],
@@ -110,178 +122,176 @@ export function parseMapboxGeocoding(features: any[]): SearchResult[] {
     .filter((item) => Number.isFinite(item.longitude) && Number.isFinite(item.latitude));
 }
 
-const GENERIC_VIETNAMESE_FOOD_TERMS = [
-  'quan chay',
-  'nha hang chay',
-  'com chay',
-  'do chay',
-  'chay',
-  'banh cuon',
-  'banh cuon long ga',
-  'bun bo',
-  'quan oc',
-  'oc dem',
-  'pho bo',
-  'pho ga',
-  'com tam',
-  'banh mi',
-  'ca phe',
-  'coffee',
-  'hu tieu',
-  'bun cha',
-  'bun dau',
-  'bun rieu',
-  'lau',
-  'nuong',
-  'quan an',
-  'nha hang',
-];
-
-function normalizeVietnameseText(str: string): string {
-  return (str || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/đ/g, 'd')
-    .trim();
-}
-
-function isGenericVietnameseFoodQuery(rawQuery: string): boolean {
-  const norm = normalizeVietnameseText(rawQuery);
-  return GENERIC_VIETNAMESE_FOOD_TERMS.some(
-    (term) => norm === term || norm.startsWith(`${term} `) || norm.includes(term)
-  );
-}
-
-function isWithinVietnamBounds(lng: number, lat: number): boolean {
-  return lng >= 102.0 && lng <= 110.5 && lat >= 8.0 && lat <= 23.8;
-}
-
-export async function searchLocationsMapbox(
+/**
+ * Hybrid Search Strategy:
+ * Step 1: Query Mapbox Geocoding API first (with proximity bias & language=vi).
+ * Step 2: If Mapbox returns 0 relevant results, automatically fall back to OpenStreetMap Nominatim API.
+ * Step 3: Supplement with /api/poi-search verified Vietnamese culinary index if needed.
+ */
+export async function searchLocationHybrid(
   query: string,
-  mapCenterLngLat?: [number, number]
+  currentLngLat?: [number, number]
 ): Promise<SearchResult[]> {
-  if (!query.trim()) return [];
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return [];
 
   const envToken = (import.meta.env.VITE_MAPBOX_TOKEN || '').trim();
-  const customOrEnvToken = (ApiKeyManager.getMapKey() || '').trim();
+  const customToken = (ApiKeyManager.getMapKey() || '').trim();
   const token =
     envToken && envToken.startsWith('pk.') && !envToken.includes('xxxxxxxx')
       ? envToken
-      : customOrEnvToken;
+      : customToken;
 
-  // 1. Strict Proximity Bias: ALWAYS resolve [lng, lat] from active map center
-  const [lng, lat] =
-    mapCenterLngLat &&
-    Number.isFinite(mapCenterLngLat[0]) &&
-    Number.isFinite(mapCenterLngLat[1])
-      ? [Number(mapCenterLngLat[0].toFixed(6)), Number(mapCenterLngLat[1].toFixed(6))]
-      : [106.7024, 10.7611];
+  const hasValidCoords =
+    currentLngLat &&
+    Number.isFinite(currentLngLat[0]) &&
+    Number.isFinite(currentLngLat[1]);
 
-  // 2. Query Pre-Processing for Generic Vietnamese Food Terms & Vietnam Bounds
-  const isGenericFood = isGenericVietnameseFoodQuery(query);
-  const inVietnam = isWithinVietnamBounds(lng, lat);
+  const [lng, lat] = hasValidCoords
+    ? [Number(currentLngLat![0].toFixed(6)), Number(currentLngLat![1].toFixed(6))]
+    : [106.7024, 10.7611];
 
+  const proximity = `&proximity=${lng},${lat}`;
+  const queryTokens = normalizeVietnameseText(trimmedQuery)
+    .split(/\s+/)
+    .filter((t) => t.length > 1);
+
+  let results: SearchResult[] = [];
+
+  // Step 1: Mapbox Primary Search (Broad types)
   if (token && token.startsWith('pk.') && !token.includes('xxxxxxxx')) {
     try {
-      const countryParam = inVietnam || isGenericFood ? '&country=vn' : '';
-      const searchBoxTypes = isGenericFood
-        ? 'poi'
-        : 'poi,address,place,locality,district';
-      const categoryParam = isGenericFood
-        ? '&category=food_and_drink,restaurant,cafe'
-        : '';
-
-      // Primary Mapbox Search Box API v1 lookup with category & strict proximity bias
-      const searchBoxEndpoint = `https://api.mapbox.com/search/searchbox/v1/forward?q=${encodeURIComponent(
-        query
-      )}&access_token=${encodeURIComponent(
-        token
-      )}&types=${searchBoxTypes}${categoryParam}${countryParam}&language=vi&limit=8&proximity=${lng},${lat}`;
-
-      const sbRes = await fetch(searchBoxEndpoint);
-      if (!sbRes.ok) {
+      const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+        trimmedQuery
+      )}.json?access_token=${encodeURIComponent(token)}&language=vi&limit=8${proximity}`;
+      const res = await fetch(mapboxUrl);
+      if (!res.ok) {
         console.error(
-          `[Mapbox SearchBox HTTP Error] Status ${sbRes.status} (${sbRes.statusText}) for query "${query}"`
+          `[Mapbox Geocoding HTTP Error] Status ${res.status} (${res.statusText}) for query "${trimmedQuery}"`
         );
       } else {
-        const sbData = await sbRes.json();
-        const rawItems = sbData.suggestions || sbData.features || [];
-        if (Array.isArray(rawItems) && rawItems.length > 0) {
-          const parsedSb = parseMapboxSearchBox(rawItems);
-          if (parsedSb.length > 0) {
-            return parsedSb;
+        const data = await res.json();
+        if (Array.isArray(data.features) && data.features.length > 0) {
+          // Verify that Mapbox features actually match the Vietnamese venue query rather than unrelated fuzzy tokens
+          const relevantFeatures = data.features.filter((f: any) => {
+            if (queryTokens.length <= 1) return true;
+            const hay = normalizeVietnameseText(
+              `${f.text_vi || ''} ${f.text || ''} ${f.place_name_vi || ''} ${f.place_name || ''}`
+            );
+            const matchedCount = queryTokens.filter((tk) => hay.includes(tk)).length;
+            return matchedCount >= Math.ceil(queryTokens.length * 0.65);
+          });
+
+          if (relevantFeatures.length > 0) {
+            results = relevantFeatures.map((f: any, idx: number): SearchResult => {
+              const center = Array.isArray(f.center) ? f.center : [lng, lat];
+              const fLng = Number(Number(center[0]).toFixed(6));
+              const fLat = Number(Number(center[1]).toFixed(6));
+              const rawName = String(
+                f.text_vi || f.text || String(f.place_name || '').split(',')[0] || trimmedQuery
+              ).trim();
+              const placeName = String(f.place_name_vi || f.place_name || rawName).trim();
+              return {
+                id: String(f.id || `mapbox-${idx}`),
+                name: rawName,
+                place_name: placeName,
+                address: placeName,
+                fullAddress: placeName,
+                coordinates: [fLng, fLat],
+                longitude: fLng,
+                latitude: fLat,
+              };
+            });
           }
         }
       }
+    } catch (e) {
+      console.warn('[Mapbox Search failed, attempting OSM Fallback]', e);
+    }
+  }
 
-      // Fallback Mapbox Geocoding API with strict proximity bias & country=vn in Vietnam bounds
-      const endpoint = isGenericFood || inVietnam
-        ? `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-            query
-          )}.json?access_token=${token}&types=poi,address&country=vn&language=vi&limit=8&proximity=${lng},${lat}`
-        : `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
-            query
-          )}.json?access_token=${token}&types=poi,address,place,locality,district&language=vi&limit=8&proximity=${lng},${lat}`;
+  // Step 2: OpenStreetMap Nominatim Fallback if Mapbox returns 0 results
+  if (results.length === 0) {
+    try {
+      const osmUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+        trimmedQuery
+      )}&format=json&addressdetails=1&limit=8&countrycodes=vn`;
+      const osmRes = await fetch(osmUrl, {
+        headers: {
+          'Accept-Language': 'vi',
+        },
+      });
+      if (osmRes.ok) {
+        const osmData = await osmRes.json();
+        if (Array.isArray(osmData) && osmData.length > 0) {
+          results = osmData
+            .map((item: any, index: number): SearchResult => {
+              const displayName = String(item.display_name || trimmedQuery).trim();
+              const rawName = Array.isArray(item.name)
+                ? String(item.name[0] || '')
+                : String(item.name || displayName.split(',')[0] || trimmedQuery).trim();
+              const itemLng = Number(parseFloat(String(item.lon)).toFixed(6));
+              const itemLat = Number(parseFloat(String(item.lat)).toFixed(6));
+              return {
+                id: `osm-${item.place_id || index}`,
+                name: rawName || displayName.split(',')[0].trim(),
+                place_name: displayName,
+                address: displayName,
+                fullAddress: displayName,
+                coordinates: [itemLng, itemLat],
+                longitude: itemLng,
+                latitude: itemLat,
+              };
+            })
+            .filter((r) => Number.isFinite(r.longitude) && Number.isFinite(r.latitude));
+        }
+      }
+    } catch (e) {
+      console.error('[OSM Search fallback failed]', e);
+    }
+  }
 
-      const geoRes = await fetch(endpoint);
-      if (!geoRes.ok) {
-        console.error(
-          `[Mapbox Geocoding HTTP Error] Status ${geoRes.status} (${geoRes.statusText}) for query "${query}"`
-        );
-      } else {
-        const geoData = await geoRes.json();
-        const geoFeatures = geoData.features || [];
-        if (Array.isArray(geoFeatures) && geoFeatures.length > 0) {
-          const parsedGeo = parseMapboxGeocoding(geoFeatures);
-          if (parsedGeo.length > 0) {
-            return parsedGeo;
-          }
+  // Step 3: Backend Proxy & Verified Vietnamese Culinary Index Fallback if still empty
+  if (results.length === 0) {
+    try {
+      const serverRes = await fetch(
+        `/api/poi-search?q=${encodeURIComponent(trimmedQuery)}${proximity}`
+      );
+      if (serverRes.ok) {
+        const serverData = await serverRes.json();
+        if (Array.isArray(serverData) && serverData.length > 0) {
+          results = serverData.slice(0, 8).map((item: any, idx: number): SearchResult => {
+            const itemLng = Number(
+              Number(item.coordinates?.[0] ?? item.longitude ?? lng).toFixed(6)
+            );
+            const itemLat = Number(
+              Number(item.coordinates?.[1] ?? item.latitude ?? lat).toFixed(6)
+            );
+            const addr = String(
+              item.place_name || item.address || item.fullAddress || item.name || ''
+            ).trim();
+            return {
+              id: String(item.id || `poi-fallback-${idx}`),
+              name: String(item.name || addr.split(',')[0] || trimmedQuery).trim(),
+              place_name: addr,
+              address: addr,
+              fullAddress: addr,
+              coordinates: [itemLng, itemLat],
+              longitude: itemLng,
+              latitude: itemLat,
+            };
+          });
         }
       }
     } catch (err) {
-      console.error('[Mapbox Search Network Error]:', err);
+      console.error('[Proxy Search fallback failed]', err);
     }
   }
 
-  // 3. Backend Proxy Fallback (/api/poi-search) with strict proximity bias
-  try {
-    const serverEndpoint = `/api/poi-search?q=${encodeURIComponent(query)}&proximity=${lng},${lat}`;
-    const serverRes = await fetch(serverEndpoint);
-    if (!serverRes.ok) {
-      console.error(
-        `[/api/poi-search HTTP Error] Status ${serverRes.status} (${serverRes.statusText}) for query "${query}"`
-      );
-      return [];
-    }
-
-    const serverData = await serverRes.json();
-    if (Array.isArray(serverData)) {
-      return serverData.slice(0, 8).map((item: any, idx: number): SearchResult => {
-        const itemLng = Number(
-          Number(item.coordinates?.[0] ?? item.longitude ?? lng).toFixed(6)
-        );
-        const itemLat = Number(
-          Number(item.coordinates?.[1] ?? item.latitude ?? lat).toFixed(6)
-        );
-        const addr = String(item.address || item.fullAddress || item.name || '').trim();
-        return {
-          id: String(item.id || `mapbox-poi-${idx}`),
-          name: String(item.name || query).trim(),
-          address: addr,
-          fullAddress: addr,
-          coordinates: [itemLng, itemLat],
-          longitude: itemLng,
-          latitude: itemLat,
-        };
-      });
-    }
-  } catch (err) {
-    console.error('[Mapbox Proxy Search Error]:', err);
-  }
-
-  return [];
+  return results;
 }
+
+export const searchLocationsMapbox = searchLocationHybrid;
 
 export const DEFAULT_POI_SEARCH_PLACEHOLDER =
   '[ 🔍 NHẬP TÊN QUÁN HOẶC ĐỊA CHỈ (VD: "CHAY LOVING HUT", "BÁNH CUỐN BÀ HOÀNH"...) ]';
@@ -337,6 +347,7 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
           name:
             parsedLink.extractedName ||
             `Pinned Venue (${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E)`,
+          place_name: addr,
           address: addr,
           fullAddress: addr,
           coordinates: [lng, lat],
@@ -353,7 +364,7 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
       setIsLoading(true);
 
       try {
-        const items = await searchLocationsMapbox(effectiveQuery, mapCenterLngLat);
+        const items = await searchLocationHybrid(effectiveQuery, mapCenterLngLat);
         setResults(items);
         setActiveIndex(0);
         setIsOpen(items.length > 0);
