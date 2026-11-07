@@ -665,7 +665,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           if (update.stage === 'ORBIT') {
             animCameraRef.current.targetZoom = 1.8;
             animCameraRef.current.targetPitch = 0;
-            animCameraRef.current.targetBearing = 0;
+            animCameraRef.current.targetBearing = 35;
           } else if (update.stage === 'REGIONAL') {
             animCameraRef.current.targetZoom = 9.5;
             animCameraRef.current.targetPitch = 30;
@@ -881,11 +881,23 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       setUseBuiltIn3DEngine(false);
 
       // Ép Mapbox resize ngay sau khi nạp xong style/layout
+      // Ensure WebGL map canvas is initialized and scaled with crisp high DPI pixel ratios
+      const applyHighDpiScaling = () => {
+        if (!mapRef.current || !mapContainer.current) return;
+        const canvas = mapRef.current.getCanvas();
+        if (canvas) {
+          const rect = mapContainer.current.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            canvas.style.width = `${rect.width}px`;
+            canvas.style.height = `${rect.height}px`;
+          }
+        }
+        mapRef.current.resize();
+      };
+
       map.on('load', () => {
         window.setTimeout(() => {
-          if (mapRef.current) {
-            mapRef.current.resize();
-          }
+          applyHighDpiScaling();
         }, 100);
       });
 
@@ -893,9 +905,7 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
       const resizeObserver =
         typeof ResizeObserver !== 'undefined'
           ? new ResizeObserver(() => {
-              if (mapRef.current) {
-                mapRef.current.resize();
-              }
+              applyHighDpiScaling();
             })
           : null;
 
@@ -1566,10 +1576,10 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
               {/* ĐƯỜNG CHIA KỸ THUẬT 1PX */}
               <div className="h-5 w-[1px] bg-[#2D2D44]" />
 
-              {/* CỤM 2: MASTER CTA TRIGGER (Luôn nổi bật với vệt cắt 45 độ) */}
+              {/* CỤM 2: MASTER CTA TRIGGER (Luôn nổi bật với vệt cắt 45 độ & subtle glowing cyan border & shadow) */}
               <button
                 onClick={triggerRenderEngine}
-                className="group relative px-4 py-1.5 bg-[#5322FF] text-white font-mono text-xs font-semibold tracking-wider flex items-center gap-2 border border-[#00E5FF] hover:bg-[#00E5FF] hover:text-[#05050A] transition-all duration-150"
+                className="group relative px-4 py-1.5 bg-[#5322FF] text-white font-mono text-xs font-semibold tracking-wider flex items-center gap-2 border border-[#00E5FF] shadow-[0_0_12px_rgba(0,229,255,0.35)] hover:bg-[#00E5FF] hover:text-[#05050A] hover:shadow-[0_0_16px_rgba(0,229,255,0.5)] transition-all duration-150"
                 style={{
                   clipPath: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px))'
                 }}

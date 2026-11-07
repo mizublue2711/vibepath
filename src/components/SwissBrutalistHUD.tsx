@@ -217,17 +217,17 @@ export const SwissBrutalistHUD: React.FC<HUDProps> = ({
             </button>
           )}
 
-          {/* 1-Click 3D Render (1px stroke button glowing #00E5FF on hover) */}
+          {/* 1-Click 3D Render (subtle glowing cyan border and shadow without over-saturation) */}
           <button
             type="button"
             onClick={handleCinematicClick}
             className={`min-h-[34px] px-3.5 bg-[#0D0E17] border font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer rounded-none ${
               isRenderingCinematic
-                ? 'border-[#00FF66] text-[#00FF66]'
-                : 'border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)]'
+                ? 'border-[#00FF66] text-[#00FF66] shadow-[0_0_12px_rgba(0,255,102,0.35)]'
+                : 'border-[#00E5FF] text-white shadow-[0_0_12px_rgba(0,229,255,0.35)] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_16px_rgba(0,229,255,0.5)]'
             }`}
           >
-            <Film className="w-3.5 h-3.5 shrink-0" />
+            <Film className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
             <span>
               {isRenderingCinematic ? 'Recording 4K 60FPS...' : 'Cinematic Render'}
             </span>

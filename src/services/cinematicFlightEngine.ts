@@ -50,6 +50,12 @@ export interface CinematicFlightOptions {
   } | null) => void;
 }
 
+/**
+ * Silky smooth cubic easing curve to eliminate micro-stutters and motion blur.
+ */
+export const easeInOutCubic = (t: number): number =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -259,7 +265,22 @@ export class CinematicFlightEngine {
         elapsedMs: Date.now() - sequenceStartMs,
       });
 
-      await sleep(1500, signal);
+      // Stage 1 Upgrade: Deep Orbit Globe Auto-Rotation (Duration: 3000ms)
+      // Keep camera at deep space view zoom: 1.8, pitch: 0°.
+      // Animate bearing smoothly from 0° to 35° over the first 3000ms using easeInOutCubic.
+      if (map) {
+        map.flyTo({
+          center: [targetLng, targetLat],
+          zoom: 1.8,
+          pitch: 0,
+          bearing: 35,
+          duration: 3000,
+          easing: easeInOutCubic,
+          essential: true,
+        });
+      }
+
+      await sleep(3000, signal);
 
       currentStageBanner = 'Regional Descent';
       onStageChange?.({
@@ -273,6 +294,7 @@ export class CinematicFlightEngine {
         elapsedMs: Date.now() - sequenceStartMs,
       });
 
+      // Stage 2: Regional Descent with easeInOutCubic easing
       if (map) {
         map.flyTo({
           center: [targetLng, targetLat],
@@ -280,6 +302,7 @@ export class CinematicFlightEngine {
           pitch: 30,
           bearing: -15,
           duration: 3500,
+          easing: easeInOutCubic,
           essential: true,
         });
       }
@@ -290,14 +313,16 @@ export class CinematicFlightEngine {
       currentDistrictScanTag = liveDistrict.hudReadout;
       currentStageBanner = liveDistrict.hudReadout;
 
+      // Stage 3: District Focus with easeInOutCubic easing
       if (map) {
         this.applyGlobalDistrictBoundaryFilter(map, targetLng, targetLat, liveDistrict);
-        map.easeTo({
+        map.flyTo({
           center: [targetLng, targetLat],
           zoom: 13.8,
           pitch: 45,
           bearing: -35,
           duration: 3000,
+          easing: easeInOutCubic,
           essential: true,
         });
       }
@@ -316,13 +341,15 @@ export class CinematicFlightEngine {
       await sleep(3000, signal);
 
       currentStageBanner = targetName;
+      // Stage 4: 3D Street Flyover with easeInOutCubic easing
       if (map) {
-        map.easeTo({
+        map.flyTo({
           center: [targetLng, targetLat],
           zoom: 17.8,
           pitch: 72,
           bearing: 40,
           duration: 4500,
+          easing: easeInOutCubic,
           essential: true,
         });
       }
