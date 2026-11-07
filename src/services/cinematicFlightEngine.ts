@@ -131,6 +131,33 @@ export class CinematicFlightEngine {
     GlobalBoundaryService.clearBoundaryHighlight(map);
   }
 
+  /**
+   * Ground-Level Camera Transition for Live Pinning / POI Selection.
+   * Keeps the camera pinned at ground/street level (zoom: ~16, pitch: ~45°)
+   * smoothly gliding the camera along the ground using low-altitude easeTo / flyTo
+   * without triggering the high-altitude space orbit sequence.
+   */
+  static glideToGroundLocation(
+    map: mapboxgl.Map | null,
+    lng: number,
+    lat: number,
+    durationMs = 1200
+  ): void {
+    if (!map) return;
+    try {
+      this.stopActiveFlight(map);
+      map.easeTo({
+        center: [lng, lat],
+        zoom: 16,
+        pitch: 45,
+        bearing: 40,
+        duration: durationMs,
+        easing: easeInOutCubic,
+        essential: true,
+      });
+    } catch (_) {}
+  }
+
   private static createFallbackTelemetryCanvas(
     targetName: string,
     getStageLabel: () => string,
