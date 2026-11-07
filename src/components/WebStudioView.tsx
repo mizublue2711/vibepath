@@ -18,6 +18,7 @@ import {
 import { ApiKeyManager } from '../services/apiKeyManager';
 import { buildWebhookRenderPayload } from '../services/webhook';
 import { SchemaValidator, FoodPOI } from '../utils/schema-validator';
+import { useTranslation } from '../context/LanguageContext';
 import { MapboxGlobePlayer } from './MapboxGlobePlayer';
 import {
   Download,
@@ -30,9 +31,11 @@ import {
 export interface WebStudioViewProps {
   nodes: CulinaryNode[];
   waypoints: RouteWaypoint[];
-  language: LanguageCode;
+  language?: LanguageCode;
   activeRiderPos: { lat: number; lng: number };
 }
+
+export type StudioLayoutProps = WebStudioViewProps;
 
 /**
  * Generate CMX 3600 .EDL Track for DaVinci Resolve / Premiere Pro / Avid NLEs
@@ -77,6 +80,9 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
   waypoints,
   language,
 }) => {
+  const { lang, t } = useTranslation();
+  const activeLang = language || lang;
+
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(nodes[0]?.id || null);
   const [earthZoomTriggerKey, setEarthZoomTriggerKey] = useState<number>(1);
   const [selectedVectorStyle, setSelectedVectorStyle] =
@@ -87,7 +93,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [statusFeedback, setStatusFeedback] = useState<string | null>(null);
 
-  const defaultAiCopy = useMemo(() => buildDefaultAiCopy(nodes, language), [nodes, language]);
+  const defaultAiCopy = useMemo(() => buildDefaultAiCopy(nodes, activeLang), [nodes, activeLang]);
   const [youtubeChapters, setYoutubeChapters] = useState<string>(defaultAiCopy.youtubeChapters);
   const [socialCaption, setSocialCaption] = useState<string>(defaultAiCopy.socialCaption);
   const [isGeneratingAi, setIsGeneratingAi] = useState<boolean>(false);
@@ -100,16 +106,16 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
   }, []);
 
   useEffect(() => {
-    const updated = buildDefaultAiCopy(nodes, language);
+    const updated = buildDefaultAiCopy(nodes, activeLang);
     setYoutubeChapters(updated.youtubeChapters);
     setSocialCaption(updated.socialCaption);
-  }, [nodes, language]);
+  }, [nodes, activeLang]);
 
   const cleanPayload = useMemo(() => {
     const rawTripData = {
       trip_id: 'TRIP_SAIGON_STUDIO_60FPS',
       youtuber_id: 'vlogger_saigon_01',
-      language,
+      language: activeLang,
       trip_name: 'Saigon Night Street Food 3D Tour',
       created_at: new Date().toISOString(),
       telemetry_data: waypoints.map((w) => ({
@@ -126,13 +132,13 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
         latitude: n.latitude,
         longitude: n.longitude,
         rating: n.rating,
-        note: language === 'en' ? n.noteEn : n.note,
+        note: activeLang === 'en' ? n.noteEn : n.note,
         timestamp: n.timestamp,
         images: n.images,
       })),
     };
     return SchemaValidator.sanitizeRenderPayload(rawTripData);
-  }, [nodes, waypoints, language]);
+  }, [nodes, waypoints, activeLang]);
 
   const selectedPoi: FoodPOI | null = useMemo(() => {
     return (
@@ -142,7 +148,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
     );
   }, [cleanPayload.food_pois, selectedNodeId]);
 
-  const srtContent = useMemo(() => generateBilingualSrt(nodes, language), [nodes, language]);
+  const srtContent = useMemo(() => generateBilingualSrt(nodes, activeLang), [nodes, activeLang]);
   const xmlContent = useMemo(() => generatePremiereXmlMarkers(nodes), [nodes]);
   const edlContent = useMemo(() => generateCmx3600EdlTrack(nodes), [nodes]);
   const geoJsonContent = useMemo(
@@ -151,8 +157,8 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
   );
   const gpxContent = useMemo(() => generateGpxTelemetry(nodes, waypoints), [nodes, waypoints]);
   const rawSensorJsonContent = useMemo(
-    () => generateRawSensorJson(nodes, waypoints, language),
-    [nodes, waypoints, language]
+    () => generateRawSensorJson(nodes, waypoints, activeLang),
+    [nodes, waypoints, activeLang]
   );
   const activePoiName = selectedPoi?.name || nodes[0]?.name || 'Saigon Street Food POI';
   const svgVectorContent = useMemo(
@@ -169,7 +175,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
       const sanitized = buildWebhookRenderPayload({
         trip_id: 'TRIP_SAIGON_STUDIO_60FPS',
         youtuber_id: 'vlogger_saigon_01',
-        language,
+        language: activeLang,
         trip_name: 'Saigon Night Street Food 3D Tour',
         created_at: new Date().toISOString(),
         telemetry_data: waypoints.map((w) => ({
@@ -186,7 +192,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
           latitude: n.latitude,
           longitude: n.longitude,
           rating: n.rating,
-          note: language === 'en' ? n.noteEn : n.note,
+          note: activeLang === 'en' ? n.noteEn : n.note,
           timestamp: n.timestamp,
           images: n.images,
         })),
@@ -195,7 +201,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
     } catch (e: any) {
       return JSON.stringify({ error: e?.message }, null, 2);
     }
-  }, [nodes, waypoints, language, byokRev]);
+  }, [nodes, waypoints, activeLang, byokRev]);
 
   const showTransientStatus = (msg: string) => {
     setStatusFeedback(msg);
@@ -212,7 +218,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 3000);
-    showTransientStatus(`EXPORTED // ${filename.toUpperCase()}`);
+    showTransientStatus(`${t('studio.statusExported')} // ${filename.toUpperCase()}`);
   };
 
   const handleDownloadLightweightSvg = () => {
@@ -232,7 +238,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
   };
 
   const handleDownload3DMapVideo = () => {
-    showTransientStatus('RENDERING 60FPS .WEBM STREAM...');
+    showTransientStatus(t('studio.statusRenderingWebm'));
     window.dispatchEvent(
       new CustomEvent('vibepath_trigger_cinematic_render', {
         detail: {
@@ -247,7 +253,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
     try {
       await navigator.clipboard.writeText(text);
       setCopiedKey(key);
-      showTransientStatus(`COPIED // ${label}`);
+      showTransientStatus(`${t('studio.statusCopied')} // ${label}`);
       setTimeout(() => setCopiedKey(null), 2000);
     } catch (_) {}
   };
@@ -255,15 +261,15 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
   const handleRegenerateWithGemini = async () => {
     setIsGeneratingAi(true);
     try {
-      const data = await ApiKeyManager.safeCallGemini(nodes, language);
+      const data = await ApiKeyManager.safeCallGemini(nodes, activeLang);
       if (data.youtubeChapters) setYoutubeChapters(data.youtubeChapters);
       if (data.socialCaption) setSocialCaption(data.socialCaption);
-      showTransientStatus(`AI METADATA SYNCED (${data.modeUsed})`);
+      showTransientStatus(`${t('studio.statusAiSynced')} (${data.modeUsed})`);
     } catch (_) {
-      const fallback = buildDefaultAiCopy(nodes, language);
+      const fallback = buildDefaultAiCopy(nodes, activeLang);
       setYoutubeChapters(fallback.youtubeChapters);
       setSocialCaption(fallback.socialCaption);
-      showTransientStatus('SYNCHRONIZED CHAPTERS & HOOKS FROM TELEMETRY');
+      showTransientStatus(t('studio.statusTelemetrySynced'));
     } finally {
       setIsGeneratingAi(false);
     }
@@ -310,16 +316,16 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
       <div className="w-full bg-[#0A0C14] border border-[#171825] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 rounded-none">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 font-mono text-xs">
           <span className="text-white font-bold tracking-wider whitespace-nowrap">
-            [ VIBEPATH // NLE_ASSET_STUDIO ]
+            {t('studio.studioHeader')}
           </span>
           <span className="text-[#23263B]">|</span>
           <span className="text-[#00FF66] font-bold flex items-center gap-1.5 whitespace-nowrap">
             <span className="w-2 h-2 bg-[#00FF66] inline-block" />
-            <span>[ SYNC_STATUS: ● READY ]</span>
+            <span>{t('studio.syncStatusReady')}</span>
           </span>
           <span className="text-[#23263B] hidden sm:inline">|</span>
           <span className="text-[#8A8FA3] whitespace-nowrap hidden sm:inline">
-            [ PRESET: DA_VINCI / PREMIERE ]
+            {t('studio.presetInfo')}
           </span>
         </div>
 
@@ -330,7 +336,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
             </span>
           ) : (
             <span className="text-[#8A8FA3] whitespace-nowrap">
-              [ {nodes.length} NODES · {waypoints.length} GPS PTS ]
+              [ {nodes.length} {t('studio.nodesLabel')} · {waypoints.length} {t('studio.gpsPointsLabel')} ]
             </span>
           )}
         </div>
@@ -342,14 +348,14 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 bg-[#00E5FF] inline-block shrink-0" />
             <span className="font-mono text-[10px] tracking-widest text-[#5322FF] uppercase">
-              [ 00 // MASTER_PRODUCTION_SUITE ]
+              {t('studio.masterSuiteHeader')}
             </span>
           </div>
           <h1 className="font-bold text-lg sm:text-xl tracking-tight text-white uppercase">
-            LIGHTWEIGHT CINEMATIC STUDIO
+            {t('studio.heroTitle')}
           </h1>
           <p className="font-mono text-xs text-[#8A8FA3]">
-            4K/8K Vector Motion Tracks (~12KB), Bilingual Time-Synced Subtitles, XMEML/EDL Timeline Markers & AI Chapters.
+            {t('studio.heroDescription')}
           </p>
         </div>
 
@@ -367,7 +373,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
             className="h-11 px-5 bg-[#00E5FF] hover:bg-[#00E5FF]/90 text-[#05050A] font-mono text-xs font-bold uppercase tracking-wider whitespace-nowrap flex items-center justify-center gap-2 cursor-pointer transition-colors shrink-0"
           >
             <Download className="w-4 h-4 shrink-0" />
-            <span>[ DOWNLOAD .ZIP PACKAGE ]</span>
+            <span>{t('studio.downloadZipPackage')}</span>
           </button>
 
           {/* Secondary Hero Button — Quantum Violet #5322FF NLE Timeline Export */}
@@ -382,7 +388,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
             }
             className="h-11 px-5 bg-[#0E101D] border border-[#5322FF] text-white hover:border-[#00E5FF] hover:text-white font-mono text-xs font-bold uppercase tracking-wider whitespace-nowrap flex items-center justify-center gap-2 cursor-pointer transition-colors shrink-0 rounded-none"
           >
-            <span>[ EXPORT TIMELINE .XML ]</span>
+            <span>{t('studio.exportTimelineXml')}</span>
           </button>
         </div>
       </div>
@@ -394,15 +400,15 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-[10px] tracking-widest text-[#5322FF] uppercase">
-                [ 01 // VECTOR_MOTION ]
+                {t('studio.vectorMotionHeader')}
               </span>
               <span className="font-mono text-xs text-[#8A8FA3]">4K/8K · 60FPS</span>
             </div>
             <h2 className="font-bold text-sm tracking-tight text-white uppercase">
-              VECTOR MOTION & OVERLAY TRACKS
+              {t('studio.vectorMotionTitle')}
             </h2>
             <p className="font-mono text-xs text-[#8A8FA3]">
-              Resolution-independent SVG trajectory (~12KB), 60FPS Lottie JSON animation, and transparent WebM sequence.
+              {t('studio.vectorMotionDesc')}
             </p>
           </div>
 
@@ -413,7 +419,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               onClick={handleDownloadLightweightSvg}
               className="h-10 px-3 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#FFFFFF] shadow-none font-mono text-xs uppercase tracking-wider whitespace-nowrap flex items-center justify-center cursor-pointer transition-colors rounded-none"
             >
-              [ .SVG ]
+              {t('studio.btnSvg')}
             </button>
 
             <button
@@ -421,7 +427,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               onClick={handleDownloadLottieJson}
               className="h-10 px-3 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#FFFFFF] shadow-none font-mono text-xs uppercase tracking-wider whitespace-nowrap flex items-center justify-center cursor-pointer transition-colors rounded-none"
             >
-              [ .LOTTIE ]
+              {t('studio.btnLottie')}
             </button>
 
             <button
@@ -429,7 +435,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               onClick={handleDownload3DMapVideo}
               className="h-10 px-3 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#FFFFFF] shadow-none font-mono text-xs uppercase tracking-wider whitespace-nowrap flex items-center justify-center cursor-pointer transition-colors rounded-none"
             >
-              [ .WEBM ]
+              {t('studio.btnWebm')}
             </button>
           </div>
         </div>
@@ -439,17 +445,17 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-[10px] tracking-widest text-[#5322FF] uppercase">
-                [ 02 // BILINGUAL_SUBTITLES ]
+                {t('studio.subtitlesHeader')}
               </span>
               <span className="font-mono text-xs text-[#8A8FA3]">
                 UTF-8 · {nodes.length * 2} CUES
               </span>
             </div>
             <h2 className="font-bold text-sm tracking-tight text-white uppercase">
-              BILINGUAL SUBTITLES & NARRATION SCRIPT
+              {t('studio.subtitlesTitle')}
             </h2>
             <p className="font-mono text-xs text-[#8A8FA3]">
-              Frame-accurate Vietnamese & English subtitle track synchronized with field culinary stops.
+              {t('studio.subtitlesDesc')}
             </p>
           </div>
 
@@ -466,7 +472,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               }
               className="h-10 px-3 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#FFFFFF] shadow-none font-mono text-xs uppercase tracking-wider whitespace-nowrap flex items-center justify-center cursor-pointer transition-colors rounded-none"
             >
-              [ DOWNLOAD .SRT ]
+              {t('studio.downloadSrt')}
             </button>
 
             <button
@@ -474,7 +480,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               onClick={() => handleCopyText(srtContent, 'srt-cell', 'BILINGUAL .SRT SCRIPT')}
               className="h-10 px-3 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#FFFFFF] shadow-none font-mono text-xs uppercase tracking-wider whitespace-nowrap flex items-center justify-center cursor-pointer transition-colors rounded-none"
             >
-              {copiedKey === 'srt-cell' ? '[ COPIED ● ]' : '[ COPY SCRIPT ]'}
+              {copiedKey === 'srt-cell' ? t('studio.copiedScript') : t('studio.copyScript')}
             </button>
           </div>
         </div>
@@ -484,17 +490,17 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-[10px] tracking-widest text-[#5322FF] uppercase">
-                [ 03 // NLE_MARKER_TIMELINE ]
+                {t('studio.nleTimelineHeader')}
               </span>
               <span className="font-mono text-xs text-[#5322FF]">
                 XMEML V5 · CMX 3600
               </span>
             </div>
             <h2 className="font-bold text-sm tracking-tight text-white uppercase">
-              NLE MARKER TIMELINE
+              {t('studio.nleTimelineTitle')}
             </h2>
             <p className="font-mono text-xs text-[#8A8FA3]">
-              Direct timeline cut-points & chapter pins for DaVinci Resolve, Adobe Premiere Pro, and CapCut Pro.
+              {t('studio.nleTimelineDesc')}
             </p>
           </div>
 
@@ -511,7 +517,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               }
               className="h-10 px-3 bg-[#0E101D] border border-[#5322FF] text-white hover:border-[#00E5FF] hover:text-[#FFFFFF] shadow-none font-mono text-xs uppercase tracking-wider whitespace-nowrap flex items-center justify-center cursor-pointer transition-colors rounded-none"
             >
-              [ XMEML .XML ]
+              {t('studio.btnXmeml')}
             </button>
 
             <button
@@ -525,7 +531,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               }
               className="h-10 px-3 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#FFFFFF] shadow-none font-mono text-xs uppercase tracking-wider whitespace-nowrap flex items-center justify-center cursor-pointer transition-colors rounded-none"
             >
-              [ .EDL TRACK ]
+              {t('studio.btnEdl')}
             </button>
           </div>
         </div>
@@ -535,15 +541,15 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-[10px] tracking-widest text-[#5322FF] uppercase">
-                [ 04 // AI_CHAPTERS_&_METADATA ]
+                {t('studio.aiChaptersHeader')}
               </span>
-              <span className="font-mono text-xs text-[#00FF66]">● READY</span>
+              <span className="font-mono text-xs text-[#00FF66]">● {t('studio.cutPoints')}</span>
             </div>
             <h2 className="font-bold text-sm tracking-tight text-white uppercase">
-              AI CHAPTERS & METADATA
+              {t('studio.aiChaptersTitle')}
             </h2>
             <p className="font-mono text-xs text-[#8A8FA3]">
-              Timestamped YouTube Chapters (MM:SS) and high-retention social hooks for Reels, TikTok & Shorts.
+              {t('studio.aiChaptersDesc')}
             </p>
           </div>
 
@@ -556,7 +562,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               }
               className="h-10 px-3 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#FFFFFF] shadow-none font-mono text-xs uppercase tracking-wider whitespace-nowrap flex items-center justify-center cursor-pointer transition-colors rounded-none"
             >
-              {copiedKey === 'chapters-cell' ? '[ COPIED ● ]' : '[ COPY CHAPTERS ]'}
+              {copiedKey === 'chapters-cell' ? t('studio.copiedAction') : t('studio.copyChapters')}
             </button>
 
             <button
@@ -566,7 +572,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               }
               className="h-10 px-3 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#FFFFFF] shadow-none font-mono text-xs uppercase tracking-wider whitespace-nowrap flex items-center justify-center cursor-pointer transition-colors rounded-none"
             >
-              {copiedKey === 'hooks-cell' ? '[ COPIED ● ]' : '[ COPY HOOKS ]'}
+              {copiedKey === 'hooks-cell' ? t('studio.copiedAction') : t('studio.copyHooks')}
             </button>
           </div>
         </div>
@@ -576,10 +582,10 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
       <div className="w-full bg-[#0A0C14] border border-[#171825] p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4 rounded-none">
         <div className="space-y-1">
           <span className="font-mono text-[10px] tracking-widest text-[#5322FF] uppercase block">
-            [ 05 // SPATIAL_TELEMETRY_ARCHIVE ]
+            {t('studio.spatialArchiveHeader')}
           </span>
           <h3 className="font-bold text-sm tracking-tight text-white uppercase">
-            RAW GNSS TRAJECTORY & GIS PACKAGING
+            {t('studio.spatialArchiveTitle')}
           </h3>
         </div>
 
@@ -635,10 +641,10 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
           <div className="flex items-center justify-between gap-2">
             <div>
               <span className="font-mono text-[10px] tracking-widest text-[#5322FF] uppercase block">
-                [ 06 // NLE_3D_PREVIEW_MONITOR ]
+                {t('studio.previewMonitorHeader')}
               </span>
               <h3 className="font-bold text-sm tracking-tight text-white uppercase">
-                3D CAMERA & TIMELINE CUT-POINT MONITOR
+                {t('studio.previewMonitorTitle')}
               </h3>
             </div>
             <button
@@ -647,7 +653,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               className="h-9 px-3.5 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#FFFFFF] font-mono text-xs uppercase tracking-wider whitespace-nowrap flex items-center gap-1.5 cursor-pointer transition-colors rounded-none"
             >
               <Rocket className="w-3.5 h-3.5 shrink-0" />
-              <span>[ REPLAY FLYOVER ]</span>
+              <span>{t('studio.replayFlyover')}</span>
             </button>
           </div>
 
@@ -661,7 +667,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               setSelectedNodeId(n.id);
               setEarthZoomTriggerKey((k) => k + 1);
             }}
-            language={language}
+            language={activeLang}
             autoTriggerKey={earthZoomTriggerKey}
             compactMode={true}
             activeStyle={selectedVectorStyle}
@@ -671,8 +677,8 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
           {/* Cut-Point Marker Strip */}
           <div className="pt-2 border-t border-[#171825]">
             <div className="flex items-center justify-between font-mono text-xs text-[#8A8FA3] mb-2">
-              <span>TIMELINE MARKER NODES</span>
-              <span className="text-[#00FF66]">● {nodes.length} CUT POINTS</span>
+              <span>{t('studio.timelineMarkerNodes')}</span>
+              <span className="text-[#00FF66]">● {nodes.length} {t('studio.cutPoints')}</span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {nodes.map((node, i) => {
@@ -714,11 +720,11 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
             <div className="flex flex-wrap items-center gap-1.5">
               {(
                 [
-                  { key: 'ai', label: '[ AI CHAPTERS ]' },
-                  { key: 'svg', label: '[ .SVG TRACK ]' },
-                  { key: 'srt', label: '[ .SRT SUBS ]' },
-                  { key: 'xml', label: '[ .XML / .EDL ]' },
-                  { key: 'contract', label: '[ JSON SCHEMA ]' },
+                  { key: 'ai', label: t('studio.tabAiChapters') },
+                  { key: 'svg', label: t('studio.tabSvgTrack') },
+                  { key: 'srt', label: t('studio.tabSrtSubs') },
+                  { key: 'xml', label: t('studio.tabXmlEdl') },
+                  { key: 'contract', label: t('studio.tabJsonSchema') },
                 ] as const
               ).map((tab) => {
                 const active = activeInspectorTab === tab.key;
@@ -748,7 +754,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
                 className="h-9 px-3 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-white font-mono text-xs uppercase tracking-wider whitespace-nowrap flex items-center gap-1.5 cursor-pointer transition-colors rounded-none"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isGeneratingAi ? 'animate-spin' : ''}`} />
-                <span>{isGeneratingAi ? '[ SYNCING... ]' : '[ REGENERATE AI ]'}</span>
+                <span>{isGeneratingAi ? t('studio.syncingAi') : t('studio.regenerateAi')}</span>
               </button>
             )}
           </div>
@@ -759,7 +765,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               <div className="bg-[#05050A] border border-[#171825] p-3.5 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[10px] tracking-widest text-[#5322FF] uppercase">
-                    [ YOUTUBE CHAPTERS // MM:SS ]
+                    {t('studio.youtubeChaptersBox')}
                   </span>
                   <button
                     type="button"
@@ -773,7 +779,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
                     ) : (
                       <Copy className="w-3.5 h-3.5" />
                     )}
-                    <span>{copiedKey === 'chapters-inspector' ? '[ COPIED ]' : '[ COPY ]'}</span>
+                    <span>{copiedKey === 'chapters-inspector' ? t('studio.copiedAction') : t('studio.copyAction')}</span>
                   </button>
                 </div>
                 <pre className="font-mono text-xs text-white whitespace-pre-wrap leading-relaxed overflow-x-auto">
@@ -784,7 +790,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
               <div className="bg-[#05050A] border border-[#171825] p-3.5 space-y-2 flex-1">
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[10px] tracking-widest text-[#5322FF] uppercase">
-                    [ SOCIAL HOOKS // REELS & TIKTOK ]
+                    {t('studio.socialHooksBox')}
                   </span>
                   <button
                     type="button"
@@ -798,7 +804,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
                     ) : (
                       <Copy className="w-3.5 h-3.5" />
                     )}
-                    <span>{copiedKey === 'caption-inspector' ? '[ COPIED ]' : '[ COPY ]'}</span>
+                    <span>{copiedKey === 'caption-inspector' ? t('studio.copiedAction') : t('studio.copyAction')}</span>
                   </button>
                 </div>
                 <pre className="font-mono text-xs text-[#8A8FA3] whitespace-pre-wrap leading-relaxed max-h-[220px] overflow-y-auto">
@@ -832,7 +838,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
                   onClick={handleDownloadLightweightSvg}
                   className="h-8 px-3 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-white font-mono text-xs uppercase tracking-wider whitespace-nowrap cursor-pointer"
                 >
-                  [ DOWNLOAD .SVG ]
+                  {t('studio.downloadSvgAction')}
                 </button>
               </div>
               <pre className="font-mono text-xs text-[#8A8FA3] whitespace-pre-wrap leading-relaxed max-h-[340px] overflow-y-auto">
@@ -845,14 +851,14 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
             <div className="bg-[#05050A] border border-[#171825] p-3.5 flex flex-col gap-2 flex-1">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[10px] tracking-widest text-[#5322FF] uppercase">
-                  [ BILINGUAL .SRT SUBTITLE STREAM ]
+                  {t('studio.srtStreamBox')}
                 </span>
                 <button
                   type="button"
                   onClick={() => handleCopyText(srtContent, 'srt-inspector', '.SRT SUBTITLES')}
                   className="h-8 px-2.5 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-white font-mono text-xs uppercase tracking-wider whitespace-nowrap cursor-pointer"
                 >
-                  {copiedKey === 'srt-inspector' ? '[ COPIED ]' : '[ COPY .SRT ]'}
+                  {copiedKey === 'srt-inspector' ? t('studio.copiedAction') : t('studio.copyAction')}
                 </button>
               </div>
               <pre className="font-mono text-xs text-white whitespace-pre-wrap leading-relaxed max-h-[360px] overflow-y-auto">
@@ -865,14 +871,14 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
             <div className="bg-[#05050A] border border-[#171825] p-3.5 flex flex-col gap-2 flex-1">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[10px] tracking-widest text-[#5322FF] uppercase">
-                  [ XMEML V5 & CMX 3600 EDL TIMELINE ]
+                  {t('studio.xmlEdlBox')}
                 </span>
                 <button
                   type="button"
                   onClick={() => handleCopyText(xmlContent, 'xml-inspector', 'XMEML .XML')}
                   className="h-8 px-2.5 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-white font-mono text-xs uppercase tracking-wider whitespace-nowrap cursor-pointer"
                 >
-                  {copiedKey === 'xml-inspector' ? '[ COPIED ]' : '[ COPY .XML ]'}
+                  {copiedKey === 'xml-inspector' ? t('studio.copiedAction') : t('studio.copyAction')}
                 </button>
               </div>
               <pre className="font-mono text-xs text-[#8A8FA3] whitespace-pre-wrap leading-relaxed max-h-[360px] overflow-y-auto">
@@ -885,7 +891,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
             <div className="bg-[#05050A] border border-[#171825] p-3.5 flex flex-col gap-2 flex-1">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[10px] tracking-widest text-[#00FF66] uppercase">
-                  [ SCHEMA VALIDATOR // DRAFT-07 READY ]
+                  {t('studio.schemaValidatorBox')}
                 </span>
                 <button
                   type="button"
@@ -894,7 +900,7 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
                   }
                   className="h-8 px-2.5 bg-[#0E101D] border border-[#23263B] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-white font-mono text-xs uppercase tracking-wider whitespace-nowrap cursor-pointer"
                 >
-                  {copiedKey === 'contract-inspector' ? '[ COPIED ]' : '[ COPY JSON ]'}
+                  {copiedKey === 'contract-inspector' ? t('studio.copiedAction') : t('studio.copyAction')}
                 </button>
               </div>
               <pre className="font-mono text-xs text-[#00FF66] whitespace-pre-wrap leading-relaxed max-h-[360px] overflow-y-auto">
@@ -907,3 +913,5 @@ export const WebStudioView: React.FC<WebStudioViewProps> = ({
     </div>
   );
 };
+
+export const StudioLayout = WebStudioView;

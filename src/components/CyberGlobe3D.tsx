@@ -1471,7 +1471,6 @@ export const CyberGlobe3D: React.FC<CyberGlobe3DProps> = ({
           onSelectLocation={handleSelectSearchLocation}
           mapCenterLngLat={activeMapCenter}
           language={language}
-          placeholder='[ 🔍 NHẬP TÊN QUÁN HOẶC ĐỊA CHỈ (VD: "CHAY LOVING HUT", "BÁNH CUỐN BÀ HOÀNH"...) ]'
           compact={true}
         />
       </div>
