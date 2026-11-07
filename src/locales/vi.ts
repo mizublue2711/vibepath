@@ -54,6 +54,7 @@ export const vi = {
     latitudeAria: 'Vĩ độ',
     longitudeAria: 'Kinh độ',
     tasteNotesPlaceholder: 'Ghi chú hương vị cho phụ đề .SRT và YouTube Chapters...',
+    tasteNotesFor: 'Ghi chú hương vị cho',
     imageUrlPlaceholder: 'Đường dẫn ảnh...',
     lastSync: 'ĐỒNG_BỘ_GẦN_NHẤT',
     readyToSync: 'SẴN_SÀNG_ĐỒNG_BỘ',
