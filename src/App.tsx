@@ -198,6 +198,10 @@ function AppContent() {
     setNodes((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
+  const handleClearSession = useCallback(() => {
+    setNodes([]);
+  }, []);
+
   /**
    * Atomic Cloud Sync Handler with 3-Step Visual Progress Stepper & Custom Brand Injection
    * 1. "Smoothing GPS Path (B-Spline)..."
@@ -552,6 +556,7 @@ function AppContent() {
             onChangeLanguage={setLanguage}
             onAddNode={handleAddNode}
             onDeleteNode={handleDeleteNode}
+            onClearSession={handleClearSession}
             onSyncToCloud={handleSyncToCloud}
             isSyncing={isSyncing}
             lastSyncReceipt={lastSyncReceipt}

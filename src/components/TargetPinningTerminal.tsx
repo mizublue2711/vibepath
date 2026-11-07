@@ -1,12 +1,23 @@
 import React, { useState } from 'react';
 import { useTranslation } from '../context/LanguageContext';
-import { CulinaryNode, FIELD_PRESET_IMAGES } from '../data/vibePathData';
+import { CulinaryNode } from '../data/vibePathData';
 import { PoiSearchBox, GeocodedPoiResult } from './PoiSearchBox';
-import { MapPin, Crosshair, CheckCircle2, CloudUpload, Plus } from 'lucide-react';
+import { MapPin, Crosshair, CheckCircle2, CloudUpload, Trash2, X } from 'lucide-react';
+
+export interface ActivePoiDraft {
+  name: string;
+  latitude: number;
+  longitude: number;
+  rating: 1 | 2 | 3 | 4 | 5;
+  note: string;
+}
 
 export interface TargetPinningTerminalProps {
   onAddNode: (node: Omit<CulinaryNode, 'id' | 'timestamp' | 'timecodeSeconds'>) => void;
   nodesCount: number;
+  pinnedLocations?: CulinaryNode[];
+  onDeleteNode?: (id: string) => void;
+  onClearSession?: () => void;
   activeRiderPos: { lat: number; lng: number };
   deviceTempC: number;
   audioPeakDb: number;
@@ -21,6 +32,9 @@ export interface TargetPinningTerminalProps {
 export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
   onAddNode,
   nodesCount,
+  pinnedLocations = [],
+  onDeleteNode,
+  onClearSession,
   activeRiderPos,
   deviceTempC,
   audioPeakDb,
@@ -31,15 +45,15 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
   onCoordinatesPinned,
   pinFormRef,
 }) => {
-  const { t, lang } = useTranslation();
+  const { t } = useTranslation();
 
+  const [activePoi, setActivePoi] = useState<ActivePoiDraft | null>(null);
   const [spotName, setSpotName] = useState<string>('');
   const [spotLat, setSpotLat] = useState<number>(Number(activeRiderPos.lat.toFixed(5)));
   const [spotLng, setSpotLng] = useState<number>(Number(activeRiderPos.lng.toFixed(5)));
   const [spotRating, setSpotRating] = useState<1 | 2 | 3 | 4 | 5>(5);
   const [spotNote, setSpotNote] = useState<string>('');
-  const [spotImages, setSpotImages] = useState<string[]>([FIELD_PRESET_IMAGES[0].url]);
-  const [customImageUrl, setCustomImageUrl] = useState<string>('');
+  const [searchResetKey, setSearchResetKey] = useState<number>(0);
   const [pinSuccessMsg, setPinSuccessMsg] = useState<string | null>(null);
 
   const handleOneTapGpsLock = () => {
@@ -47,15 +61,30 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
     const lockedLng = Number(activeRiderPos.lng.toFixed(6));
     setSpotLat(lockedLat);
     setSpotLng(lockedLng);
+    if (activePoi) {
+      setActivePoi({
+        ...activePoi,
+        latitude: lockedLat,
+        longitude: lockedLng,
+      });
+    }
   };
 
   const handleSelectAutocompletePoi = (result: GeocodedPoiResult) => {
+    const defaultNote = spotNote.trim() || result.fullAddress || '';
     setSpotName(result.name);
     setSpotLat(result.latitude);
     setSpotLng(result.longitude);
-    if (!spotNote.trim() && result.fullAddress) {
-      setSpotNote(result.fullAddress);
-    }
+    setSpotNote(defaultNote);
+
+    setActivePoi({
+      name: result.name,
+      latitude: result.latitude,
+      longitude: result.longitude,
+      rating: spotRating,
+      note: defaultNote,
+    });
+
     setPinSuccessMsg(
       `${t('pinning.selectedPoi')} "${result.name}" (${result.latitude.toFixed(4)}°N, ${result.longitude.toFixed(4)}°E)`
     );
@@ -63,53 +92,96 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
     setTimeout(() => setPinSuccessMsg(null), 4000);
   };
 
-  const handleToggleImage = (url: string) => {
-    setSpotImages((prev) =>
-      prev.includes(url)
-        ? prev.length > 1
-          ? prev.filter((u) => u !== url)
-          : prev
-        : [...prev, url]
-    );
+  const handleUpdateName = (val: string) => {
+    setSpotName(val);
+    if (val.trim()) {
+      setActivePoi((prev) => ({
+        name: val,
+        latitude: prev?.latitude ?? spotLat,
+        longitude: prev?.longitude ?? spotLng,
+        rating: prev?.rating ?? spotRating,
+        note: prev?.note ?? spotNote,
+      }));
+    } else if (!activePoi?.latitude) {
+      setActivePoi(null);
+    } else {
+      setActivePoi((prev) => (prev ? { ...prev, name: '' } : null));
+    }
   };
 
-  const handleAddCustomImage = () => {
-    const trimmed = customImageUrl.trim();
-    if (!trimmed) return;
-    if (!spotImages.includes(trimmed)) {
-      setSpotImages((prev) => [...prev, trimmed]);
+  const handleUpdateRating = (ratingVal: 1 | 2 | 3 | 4 | 5) => {
+    setSpotRating(ratingVal);
+    if (activePoi) {
+      setActivePoi({
+        ...activePoi,
+        rating: ratingVal,
+      });
     }
-    setCustomImageUrl('');
+  };
+
+  const handleUpdateNote = (val: string) => {
+    setSpotNote(val);
+    if (activePoi) {
+      setActivePoi({
+        ...activePoi,
+        note: val,
+      });
+    }
+  };
+
+  const handleRemoveActivePoiChip = () => {
+    setActivePoi(null);
+    setSpotName('');
+    setSpotNote('');
+    setSearchResetKey((k) => k + 1);
+  };
+
+  const handleClearSessionClick = () => {
+    if (window.confirm(t('pinning.clearSessionConfirm'))) {
+      onClearSession?.();
+      setActivePoi(null);
+      setSpotName('');
+      setSpotNote('');
+      setSearchResetKey((k) => k + 1);
+    }
   };
 
   const handleSubmitSpotPin = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanName = spotName.trim() || `${t('pinning.defaultPoiPrefix')} #${nodesCount + 1}`;
-    const cleanNote = spotNote.trim() || t('pinning.defaultPoiNote');
+    const cleanName =
+      (activePoi?.name || spotName).trim() ||
+      `${t('pinning.defaultPoiPrefix')} #${nodesCount + 1}`;
+    const cleanNote =
+      (activePoi?.note || spotNote).trim() || t('pinning.defaultPoiNote');
+    const targetLat = activePoi ? activePoi.latitude : spotLat;
+    const targetLng = activePoi ? activePoi.longitude : spotLng;
+    const currentRating = activePoi ? activePoi.rating : spotRating;
 
-    const int2Rating = Math.min(5, Math.max(1, parseInt(String(spotRating), 10) || 5)) as
-      | 1
-      | 2
-      | 3
-      | 4
-      | 5;
+    const int2Rating = Math.min(
+      5,
+      Math.max(1, parseInt(String(currentRating), 10) || 5)
+    ) as 1 | 2 | 3 | 4 | 5;
 
     onAddNode({
       name: cleanName,
-      latitude: Number(spotLat),
-      longitude: Number(spotLng),
+      latitude: Number(targetLat),
+      longitude: Number(targetLng),
       rating: int2Rating,
       note: cleanNote,
       noteEn: cleanNote,
-      images: spotImages.length > 0 ? spotImages : [FIELD_PRESET_IMAGES[0].url],
+      images: [],
       durationSeconds: 18,
       district: 'District 1, Ben Thanh',
       temperatureC: deviceTempC,
       audioPeakDb: audioPeakDb,
     });
 
+    // Reset active POI, search input, and notes box for next location
+    setActivePoi(null);
     setSpotName('');
     setSpotNote('');
+    setSearchResetKey((k) => k + 1);
+
     setPinSuccessMsg(`${t('pinning.pinnedSuccess')} "${cleanName}" (${int2Rating}/5)`);
     onCoordinatesPinned?.();
     setTimeout(() => setPinSuccessMsg(null), 3500);
@@ -143,6 +215,16 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
 
             <button
               type="button"
+              onClick={handleClearSessionClick}
+              className="min-h-[34px] px-3 bg-[#0D0E17] border border-[#1F1F2E] text-[#FF5252] hover:border-[#FF5252] hover:bg-[#FF5252]/10 font-mono text-xs font-bold flex items-center gap-1.5 cursor-pointer rounded-none"
+              title={t('pinning.clearSession')}
+            >
+              <Trash2 className="w-3.5 h-3.5 shrink-0 text-[#FF5252]" />
+              <span>{t('pinning.clearSession')}</span>
+            </button>
+
+            <button
+              type="button"
               onClick={onClose}
               className="min-h-[34px] px-3 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#FF5252] hover:text-white font-mono text-xs font-bold cursor-pointer rounded-none"
             >
@@ -161,6 +243,7 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="space-y-2">
             <PoiSearchBox
+              key={searchResetKey}
               onSelectLocation={handleSelectAutocompletePoi}
               mapCenterLngLat={[spotLng, spotLat]}
               placeholder={t('search.placeholder')}
@@ -171,7 +254,7 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
               id="poi-name"
               type="text"
               value={spotName}
-              onChange={(e) => setSpotName(e.target.value)}
+              onChange={(e) => handleUpdateName(e.target.value)}
               placeholder={t('pinning.venueNamePlaceholder')}
               className="w-full min-h-[40px] px-3 bg-[#05050A] border border-[#1F1F2E] text-white font-mono text-xs focus:border-[#00E5FF] focus:outline-none rounded-none"
             />
@@ -201,12 +284,13 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
           <div className="space-y-2">
             <div className="grid grid-cols-5 gap-1.5">
               {([1, 2, 3, 4, 5] as const).map((starVal) => {
-                const active = starVal <= spotRating;
+                const currentVal = activePoi ? activePoi.rating : spotRating;
+                const active = starVal <= currentVal;
                 return (
                   <button
                     key={starVal}
                     type="button"
-                    onClick={() => setSpotRating(starVal)}
+                    onClick={() => handleUpdateRating(starVal)}
                     className={`min-h-[36px] bg-[#0D0E17] border flex items-center justify-center gap-1 font-mono text-xs font-bold cursor-pointer rounded-none ${
                       active
                         ? 'border-[#00E5FF] text-[#00E5FF]'
@@ -223,53 +307,70 @@ export const TargetPinningTerminal: React.FC<TargetPinningTerminalProps> = ({
             <textarea
               id="poi-note"
               rows={2}
-              value={spotNote}
-              onChange={(e) => setSpotNote(e.target.value)}
+              value={activePoi ? activePoi.note : spotNote}
+              onChange={(e) => handleUpdateNote(e.target.value)}
               placeholder={t('pinning.tasteNotesPlaceholder')}
               className="w-full p-2.5 bg-[#05050A] border border-[#1F1F2E] text-white font-mono text-xs focus:border-[#00E5FF] focus:outline-none resize-none rounded-none"
             />
 
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 flex-1 overflow-x-auto">
-                {FIELD_PRESET_IMAGES.map((preset) => {
-                  const selected = spotImages.includes(preset.url);
-                  return (
-                    <button
-                      key={preset.url}
-                      type="button"
-                      onClick={() => handleToggleImage(preset.url)}
-                      className={`px-2 py-1 bg-[#05050A] border font-mono text-[11px] flex items-center gap-1.5 cursor-pointer shrink-0 rounded-none ${
-                        selected
-                          ? 'border-[#00E5FF] text-white'
-                          : 'border-[#1F1F2E] text-[#8A8FA3]'
-                      }`}
+            {/* Dynamic Active POI Chip List & Empty State */}
+            <div className="pt-1 flex flex-wrap items-center gap-2 min-h-[36px]">
+              {!activePoi && pinnedLocations.length === 0 ? (
+                <div className="w-full py-2 px-3 border border-dashed border-[#1F1F2E] bg-[#05050A] font-mono text-[11px] text-[#8A8FA3] flex items-center justify-center text-center rounded-none select-none">
+                  {t('pinning.emptyPoiState')}
+                </div>
+              ) : (
+                <>
+                  {/* Instantly instantiated Active POI Chip */}
+                  {activePoi && (
+                    <div
+                      style={{
+                        background: 'rgba(0, 229, 255, 0.1)',
+                      }}
+                      className="px-2.5 py-1.5 border border-[#00E5FF] font-mono text-xs flex items-center gap-2 text-white shadow-[0_0_8px_rgba(0,229,255,0.2)] rounded-none shrink-0"
                     >
-                      <img
-                        src={preset.url}
-                        alt={lang === 'en' ? preset.labelEn : preset.labelVi}
-                        referrerPolicy="no-referrer"
-                        className="w-5 h-5 object-cover"
-                      />
-                      <span>{lang === 'en' ? preset.labelEn : preset.labelVi}</span>
-                    </button>
-                  );
-                })}
-              </div>
+                      <span className="font-bold text-[#00E5FF]">
+                        [ 📍 01 // {(activePoi.name || t('pinning.defaultPoiPrefix')).toUpperCase()} ]
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleRemoveActivePoiChip}
+                        className="text-[#8A8FA3] hover:text-[#FF5252] p-0.5 cursor-pointer rounded-none transition-colors"
+                        title={t('pinning.removePoiChip')}
+                        aria-label={t('pinning.removePoiChip')}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
 
-              <input
-                type="url"
-                value={customImageUrl}
-                onChange={(e) => setCustomImageUrl(e.target.value)}
-                placeholder={t('pinning.imageUrlPlaceholder')}
-                className="w-32 min-h-[32px] px-2 bg-[#05050A] border border-[#1F1F2E] text-white font-mono text-xs rounded-none"
-              />
-              <button
-                type="button"
-                onClick={handleAddCustomImage}
-                className="min-h-[32px] px-2 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] cursor-pointer rounded-none"
-              >
-                <Plus className="w-3.5 h-3.5" />
-              </button>
+                  {/* Pinned history list under notes box */}
+                  {pinnedLocations.map((loc, idx) => {
+                    const chipIdx = String((activePoi ? idx + 2 : idx + 1)).padStart(2, '0');
+                    return (
+                      <div
+                        key={loc.id}
+                        className="px-2.5 py-1.5 border border-[#1F1F2E] bg-[#05050A] hover:border-[#00E5FF]/40 font-mono text-xs flex items-center gap-2 text-[#8A8FA3] rounded-none shrink-0"
+                      >
+                        <span className="text-white">
+                          [ 📍 {chipIdx} // {loc.name.toUpperCase()} ]
+                        </span>
+                        {onDeleteNode && (
+                          <button
+                            type="button"
+                            onClick={() => onDeleteNode(loc.id)}
+                            className="text-[#8A8FA3] hover:text-[#FF5252] p-0.5 cursor-pointer rounded-none transition-colors"
+                            title={t('pinning.removePoiChip')}
+                            aria-label={t('pinning.removePoiChip')}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
             </div>
           </div>
         </div>

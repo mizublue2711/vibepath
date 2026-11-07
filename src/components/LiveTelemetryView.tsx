@@ -40,6 +40,7 @@ export interface LiveTelemetryViewProps {
   onChangeLanguage?: (lang: LanguageCode) => void;
   onAddNode: (node: Omit<CulinaryNode, 'id' | 'timestamp' | 'timecodeSeconds'>) => void;
   onDeleteNode: (id: string) => void;
+  onClearSession?: () => void;
   onSyncToCloud: (validatedPayload?: RenderPayload) => Promise<void>;
   isSyncing: boolean;
   lastSyncReceipt: CloudSyncReceipt | null;
@@ -68,6 +69,7 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
   language,
   onAddNode,
   onDeleteNode,
+  onClearSession,
   onSyncToCloud,
   isSyncing,
   lastSyncReceipt,
@@ -479,6 +481,9 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
         <TargetPinningTerminal
           onAddNode={onAddNode}
           nodesCount={nodes.length}
+          pinnedLocations={nodes}
+          onDeleteNode={onDeleteNode}
+          onClearSession={onClearSession}
           activeRiderPos={activeRiderPos}
           deviceTempC={telemetry.deviceTempC}
           audioPeakDb={telemetry.audioDb}

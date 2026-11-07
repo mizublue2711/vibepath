@@ -65,6 +65,12 @@ export const vi = {
     pinnedSuccess: 'Đã ghim',
     defaultPoiPrefix: 'Điểm Ẩm Thực',
     defaultPoiNote: 'Hương vị đậm đà, nhiệt độ món ăn nóng hổi vừa ra lò tại hiện trường.',
+    clearSession: '[ 🗑️ CLEAR SESSION ]',
+    clearSessionConfirm: 'Bạn có chắc muốn xóa tất cả điểm ghim trong phiên này không?',
+    emptyPoiState: '[ 📍 CHƯA CÓ ĐIỂM GHIM • CHỌN ĐỊA ĐIỂM BÊN TRÁI ĐỂ BẮT ĐẦU ]',
+    removePoiChip: 'Xóa điểm ghim',
+    activeChipLabel: 'ĐIỂM_ĐANG_CHỌN',
+    pinnedHistoryLabel: 'LỊCH_SỬ_ĐIỂM_GHIM',
   },
   studio: {
     studioHeader: '[ VIBEPATH // NLE_ASSET_STUDIO ]',
