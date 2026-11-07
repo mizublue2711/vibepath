@@ -1,6 +1,7 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ * VibePath Production Build Trigger: TargetPinningTerminal live verification sync
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
