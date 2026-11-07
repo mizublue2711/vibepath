@@ -5,23 +5,19 @@ import {
   TelemetryState,
   LanguageCode,
   CloudSyncReceipt,
-  FIELD_PRESET_IMAGES,
   generateRouteGeoJson,
   generateGpxTelemetry,
   generateRawSensorJson,
 } from '../data/vibePathData';
 import { SchemaValidator, RenderPayload, FoodPOI } from '../utils/schema-validator';
 import { useTheme } from '../context/ThemeContext';
+import { useTranslation } from '../context/LanguageContext';
 import { MapboxGlobePlayer } from './MapboxGlobePlayer';
-import { PoiSearchBox, GeocodedPoiResult } from './PoiSearchBox';
+import { TargetPinningTerminal } from './TargetPinningTerminal';
 import {
   MapPin,
   Radio,
-  CloudUpload,
-  Plus,
   Trash2,
-  Crosshair,
-  CheckCircle2,
   Image as ImageIcon,
   Rocket,
   Download,
@@ -40,8 +36,8 @@ export interface LiveTelemetryViewProps {
   telemetry: TelemetryState;
   isTracking: boolean;
   onToggleTracking: () => void;
-  language: LanguageCode;
-  onChangeLanguage: (lang: LanguageCode) => void;
+  language?: LanguageCode;
+  onChangeLanguage?: (lang: LanguageCode) => void;
   onAddNode: (node: Omit<CulinaryNode, 'id' | 'timestamp' | 'timecodeSeconds'>) => void;
   onDeleteNode: (id: string) => void;
   onSyncToCloud: (validatedPayload?: RenderPayload) => Promise<void>;
@@ -81,21 +77,15 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
   onDistrictResolved,
 }) => {
   const { accentColor, fontFamily } = useTheme();
+  const { lang, t } = useTranslation();
+  const activeLang = language || lang;
+
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(nodes[0]?.id || null);
   const [earthZoomTriggerKey, setEarthZoomTriggerKey] = useState<number>(0);
   const [exportToast, setExportToast] = useState<string | null>(null);
 
   const [isTelemetryDrawerOpen, setIsTelemetryDrawerOpen] = useState<boolean>(false);
   const [isPinDrawerOpen, setIsPinDrawerOpen] = useState<boolean>(false);
-
-  const [spotName, setSpotName] = useState<string>('');
-  const [spotLat, setSpotLat] = useState<number>(Number(activeRiderPos.lat.toFixed(5)));
-  const [spotLng, setSpotLng] = useState<number>(Number(activeRiderPos.lng.toFixed(5)));
-  const [spotRating, setSpotRating] = useState<1 | 2 | 3 | 4 | 5>(5);
-  const [spotNote, setSpotNote] = useState<string>('');
-  const [spotImages, setSpotImages] = useState<string[]>([FIELD_PRESET_IMAGES[0].url]);
-  const [customImageUrl, setCustomImageUrl] = useState<string>('');
-  const [pinSuccessMsg, setPinSuccessMsg] = useState<string | null>(null);
 
   const centralMapRef = React.useRef<HTMLDivElement | null>(null);
 
@@ -114,9 +104,9 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
     const rawTripData = {
       trip_id: 'TRIP_SAIGON_NIGHT_01',
       youtuber_id: 'vlogger_field_ops',
-      language,
+      language: activeLang,
       trip_name:
-        language === 'vi'
+        activeLang === 'vi'
           ? 'Hành trình Ẩm thực Đêm Sài Gòn 3D'
           : 'Saigon Night Street Food 3D Tour',
       created_at: new Date().toISOString(),
@@ -136,13 +126,13 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
         latitude: n.latitude,
         longitude: n.longitude,
         rating: n.rating,
-        note: language === 'en' ? n.noteEn : n.note,
+        note: activeLang === 'en' ? n.noteEn : n.note,
         timestamp: n.timestamp,
         images: n.images,
       })),
     };
     return SchemaValidator.sanitizeRenderPayload(rawTripData);
-  }, [nodes, waypoints, language, accentColor, fontFamily]);
+  }, [nodes, waypoints, activeLang, accentColor, fontFamily]);
 
   const selectedPoi: FoodPOI | null = useMemo(() => {
     const found =
@@ -154,8 +144,6 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
 
   const handleTrigger3DZoomToNode = (node: CulinaryNode, scrollToMap = true) => {
     setSelectedNodeId(node.id);
-    setSpotLat(node.latitude);
-    setSpotLng(node.longitude);
     setEarthZoomTriggerKey((k) => k + 1);
     if (scrollToMap && centralMapRef.current) {
       centralMapRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -181,16 +169,8 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
     setTimeout(() => setExportToast(null), 3200);
   };
 
-  const handleOneTapGpsLock = () => {
-    const lockedLat = Number(activeRiderPos.lat.toFixed(6));
-    const lockedLng = Number(activeRiderPos.lng.toFixed(6));
-    setSpotLat(lockedLat);
-    setSpotLng(lockedLng);
-  };
-
-  const handlePickMapCoord = (lat: number, lng: number) => {
-    setSpotLat(lat);
-    setSpotLng(lng);
+  const handlePickMapCoord = (_lat: number, _lng: number) => {
+    // Coordinated through map picking
   };
 
   const handleAddPoiFromMap = (coords: {
@@ -201,112 +181,29 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
   }) => {
     const cleanLat = Number(coords.latitude.toFixed(6));
     const cleanLng = Number(coords.longitude.toFixed(6));
-    setSpotLat(cleanLat);
-    setSpotLng(cleanLng);
-    if (coords.name && coords.name !== 'MAP_CLICK_TARGET') {
-      setSpotName(coords.name);
-    }
-    setPinSuccessMsg(
-      language === 'vi'
-        ? `Đã khóa tọa độ từ bản đồ 3D: ${cleanLat.toFixed(4)}°N, ${cleanLng.toFixed(4)}°E`
-        : `Locked 3D map coordinates: ${cleanLat.toFixed(4)}°N, ${cleanLng.toFixed(4)}°E`
-    );
-    setTimeout(() => setPinSuccessMsg(null), 3500);
-  };
-
-  const handleSelectAutocompletePoi = (result: GeocodedPoiResult) => {
-    setSpotName(result.name);
-    setSpotLat(result.latitude);
-    setSpotLng(result.longitude);
-    if (!spotNote.trim() && result.fullAddress) {
-      setSpotNote(result.fullAddress);
-    }
-    setEarthZoomTriggerKey((k) => k + 1);
-    setPinSuccessMsg(
-      language === 'vi'
-        ? `Đã chọn "${result.name}" (${result.latitude.toFixed(4)}°N, ${result.longitude.toFixed(4)}°E)`
-        : `Selected "${result.name}" (${result.latitude.toFixed(4)}°N, ${result.longitude.toFixed(4)}°E)`
-    );
-    if (centralMapRef.current) {
-      centralMapRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-    setTimeout(() => setPinSuccessMsg(null), 4000);
-  };
-
-  const handleToggleImage = (url: string) => {
-    setSpotImages((prev) =>
-      prev.includes(url)
-        ? prev.length > 1
-          ? prev.filter((u) => u !== url)
-          : prev
-        : [...prev, url]
-    );
-  };
-
-  const handleAddCustomImage = () => {
-    const trimmed = customImageUrl.trim();
-    if (!trimmed) return;
-    if (!spotImages.includes(trimmed)) {
-      setSpotImages((prev) => [...prev, trimmed]);
-    }
-    setCustomImageUrl('');
-  };
-
-  const handleSubmitSpotPin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanName =
-      spotName.trim() ||
-      (language === 'vi'
-        ? `Điểm Ẩm Thực #${nodes.length + 1}`
-        : `Culinary Spot #${nodes.length + 1}`);
-    const cleanNote =
-      spotNote.trim() ||
-      (language === 'vi'
-        ? 'Hương vị đậm đà, nhiệt độ món ăn nóng hổi vừa ra lò tại hiện trường.'
-        : 'Bold street-side flavor captured fresh on location with verified GPS lock.');
-
-    const int2Rating = Math.min(5, Math.max(1, parseInt(String(spotRating), 10) || 5)) as
-      | 1
-      | 2
-      | 3
-      | 4
-      | 5;
-
     onAddNode({
-      name: cleanName,
-      latitude: Number(spotLat),
-      longitude: Number(spotLng),
-      rating: int2Rating,
-      note: cleanNote,
-      noteEn: cleanNote,
-      images: spotImages.length > 0 ? spotImages : [FIELD_PRESET_IMAGES[0].url],
+      name: coords.name && coords.name !== 'MAP_CLICK_TARGET' ? coords.name : `${t('pinning.defaultPoiPrefix')} #${nodes.length + 1}`,
+      latitude: cleanLat,
+      longitude: cleanLng,
+      rating: 5,
+      note: t('pinning.defaultPoiNote'),
+      noteEn: t('pinning.defaultPoiNote'),
+      images: [],
       durationSeconds: 18,
       district: 'District 1, Ben Thanh',
       temperatureC: telemetry.deviceTempC,
       audioPeakDb: telemetry.audioDb,
     });
-
-    setSpotName('');
-    setSpotNote('');
-    setPinSuccessMsg(
-      language === 'vi'
-        ? `Đã ghim "${cleanName}" (${int2Rating}/5)`
-        : `Pinned "${cleanName}" (${int2Rating}/5)`
-    );
     setEarthZoomTriggerKey((k) => k + 1);
-    if (centralMapRef.current) {
-      centralMapRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-    setTimeout(() => setPinSuccessMsg(null), 3500);
   };
 
   const handleValidatedSyncAndZoom = async () => {
     const sanitized = SchemaValidator.sanitizeRenderPayload({
       trip_id: `TRIP_${Date.now()}`,
       youtuber_id: 'vlogger_field_ops',
-      language,
+      language: activeLang,
       trip_name:
-        language === 'vi'
+        activeLang === 'vi'
           ? 'Hành trình Ẩm thực Đêm Sài Gòn 3D'
           : 'Saigon Night Street Food 3D Tour',
       created_at: new Date().toISOString(),
@@ -326,7 +223,7 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
         latitude: n.latitude,
         longitude: n.longitude,
         rating: n.rating,
-        note: language === 'en' ? n.noteEn : n.note,
+        note: activeLang === 'en' ? n.noteEn : n.note,
         timestamp: n.timestamp,
         images: n.images,
       })),
@@ -359,13 +256,11 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
           waypoints={waypoints}
           onSelectNode={(n) => {
             setSelectedNodeId(n.id);
-            setSpotLat(n.latitude);
-            setSpotLng(n.longitude);
           }}
           onPickCoordinate={handlePickMapCoord}
           onAddPoiFromMap={handleAddPoiFromMap}
           onDistrictResolved={onDistrictResolved}
-          language={language}
+          language={activeLang}
           autoTriggerKey={earthZoomTriggerKey}
           onOpenSettings={onOpenSettings}
           onOpenPinModal={openPinDrawerAndScroll}
@@ -374,7 +269,7 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
 
       {/* 2. Single Compact Telemetry Strip & Collapsible POI Drawer */}
       <section
-        aria-label="Collapsible Telemetry Drawer"
+        aria-label={t('telemetry.drawerAriaLabel')}
         className="bg-[#0D0E17] border border-[#1F1F2E] w-full max-w-full overflow-hidden rounded-none"
       >
         <div className="px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-3">
@@ -382,7 +277,7 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
             <div className="flex items-center gap-2">
               <Route className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
               <span className="text-[#8A8FA3]">
-                {language === 'vi' ? 'DISTANCE:' : 'DISTANCE:'}
+                {t('telemetry.distance')}:
               </span>
               <span className="font-bold text-white">
                 {telemetry.distanceKm.toFixed(2)} KM
@@ -391,7 +286,7 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
 
             <div className="flex items-center gap-2">
               <Clock className="w-3.5 h-3.5 text-[#00E5FF] shrink-0" />
-              <span className="text-[#8A8FA3]">TIME:</span>
+              <span className="text-[#8A8FA3]">{t('telemetry.time')}:</span>
               <span className="font-bold text-white">
                 {formatDuration(telemetry.elapsedSeconds)}
               </span>
@@ -399,7 +294,7 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
 
             <div className="flex items-center gap-2">
               <MapPin className="w-3.5 h-3.5 text-[#00FF66] shrink-0" />
-              <span className="text-[#8A8FA3]">POIs:</span>
+              <span className="text-[#8A8FA3]">{t('telemetry.pois')}:</span>
               <span className="font-bold text-[#00FF66]">{nodes.length}</span>
             </div>
           </div>
@@ -415,7 +310,7 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
               }`}
             >
               <Radio className="w-3.5 h-3.5 shrink-0" />
-              <span>{isTracking ? 'Tracking Active' : 'Paused'}</span>
+              <span>{isTracking ? t('telemetry.trackingActive') : t('telemetry.trackingPaused')}</span>
             </button>
 
             <button
@@ -425,8 +320,8 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
             >
               <span>
                 {isTelemetryDrawerOpen
-                  ? `Hide POIs (${nodes.length})`
-                  : `POIs & GIS (${nodes.length})`}
+                  ? `${t('telemetry.hidePois')} (${nodes.length})`
+                  : `${t('telemetry.showPois')} (${nodes.length})`}
               </span>
               {isTelemetryDrawerOpen ? (
                 <ChevronUp className="w-3.5 h-3.5 shrink-0" />
@@ -473,12 +368,12 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
 
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
-                          <span className="font-bold text-[#00E5FF]">[ {nodeNum} // POI ]</span>
+                          <span className="font-bold text-[#00E5FF]">[ {nodeNum} // {t('telemetry.poiIndex')} ]</span>
                           <span className="font-bold text-white uppercase">{node.name}</span>
                           <span className="text-[#00FF66] font-bold">{node.rating}/5</span>
                         </div>
                         <p className="text-xs text-[#8A8FA3] line-clamp-1 mt-0.5">
-                          {language === 'vi' ? node.note : node.noteEn}
+                          {activeLang === 'vi' ? node.note : node.noteEn}
                         </p>
                       </div>
                     </div>
@@ -493,7 +388,7 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
                         className="min-h-[34px] px-3 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)] font-mono text-xs uppercase tracking-wider font-bold flex items-center gap-1.5 cursor-pointer transition-all rounded-none whitespace-nowrap"
                       >
                         <Rocket className="w-3.5 h-3.5 shrink-0" />
-                        <span>Fly 3D</span>
+                        <span>{t('telemetry.fly3d')}</span>
                       </button>
 
                       <button
@@ -503,8 +398,8 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
                           onDeleteNode(node.id);
                         }}
                         className="min-h-[34px] px-2.5 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:text-[#FF5252] hover:border-[#FF5252] flex items-center justify-center cursor-pointer rounded-none"
-                        title="Remove POI"
-                        aria-label="Remove POI"
+                        title={t('telemetry.removePoi')}
+                        aria-label={t('telemetry.removePoi')}
                       >
                         <Trash2 className="w-4 h-4 shrink-0" />
                       </button>
@@ -518,7 +413,7 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
             <div className="pt-2 border-t border-[#1F1F2E] flex flex-wrap items-center justify-between gap-2">
               <span className="font-mono text-xs text-[#8A8FA3] flex items-center gap-1.5">
                 <Download className="w-3.5 h-3.5 text-[#00E5FF]" />
-                <span>EXPORT_ROUTE_TELEMETRY:</span>
+                <span>{t('telemetry.exportRouteTelemetry')}:</span>
               </span>
 
               {exportToast && (
@@ -533,7 +428,7 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
                       generateRouteGeoJson(nodes, waypoints),
                       'vibepath-culinary-gis.geojson',
                       'application/geo+json;charset=utf-8',
-                      'Exported .GEOJSON'
+                      t('telemetry.exportedGeojson')
                     )
                   }
                   className="min-h-[32px] px-2.5 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] font-mono text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all rounded-none"
@@ -549,7 +444,7 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
                       generateGpxTelemetry(nodes, waypoints),
                       'vibepath-telemetry.gpx',
                       'application/gpx+xml;charset=utf-8',
-                      'Exported .GPX'
+                      t('telemetry.exportedGpx')
                     )
                   }
                   className="min-h-[32px] px-2.5 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] font-mono text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all rounded-none"
@@ -562,10 +457,10 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
                   type="button"
                   onClick={() =>
                     triggerFieldDownload(
-                      generateRawSensorJson(nodes, waypoints, language),
+                      generateRawSensorJson(nodes, waypoints, activeLang),
                       'vibepath-telemetry.json',
                       'application/json;charset=utf-8',
-                      'Exported .JSON'
+                      t('telemetry.exportedJson')
                     )
                   }
                   className="min-h-[32px] px-2.5 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] font-mono text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all rounded-none"
@@ -580,206 +475,26 @@ export const LiveTelemetryView: React.FC<LiveTelemetryViewProps> = ({
       </section>
 
       {/* 3. Collapsible One-Tap Spot Pinning Drawer (Triggered from Bottom-Center Chiseled 45° Pin POI Button) */}
-      <div ref={pinFormRef} className="rounded-none">
-        {isPinDrawerOpen && (
-          <form
-            onSubmit={handleSubmitSpotPin}
-            className="bg-[#0D0E17] border border-[#1F1F2E] p-4 flex flex-col gap-3.5 w-full max-w-full overflow-hidden rounded-none"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1F1F2E] pb-2.5">
-              <div>
-                <span className="font-mono text-[10px] tracking-widest text-[#5322FF] block">
-                  [ 02 // TARGET_PINNING_TERMINAL ]
-                </span>
-                <h2 className="text-sm font-bold text-white uppercase tracking-tight">
-                  {language === 'vi' ? 'Ghim điểm dừng chân mới' : 'Pin New Culinary Spot'}
-                </h2>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleOneTapGpsLock}
-                  className="min-h-[34px] px-3 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] font-mono text-xs font-bold flex items-center gap-1.5 cursor-pointer rounded-none"
-                >
-                  <Crosshair className="w-3.5 h-3.5 shrink-0" />
-                  <span>GPS Lock</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setIsPinDrawerOpen(false)}
-                  className="min-h-[34px] px-3 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#FF5252] hover:text-white font-mono text-xs font-bold cursor-pointer rounded-none"
-                >
-                  {language === 'vi' ? 'Đóng' : 'Close'}
-                </button>
-              </div>
-            </div>
-
-            {pinSuccessMsg && (
-              <div className="bg-[#05050A] border border-[#00FF66] p-2.5 flex items-center gap-2 text-[#00FF66] font-mono text-xs rounded-none">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>{pinSuccessMsg}</span>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <PoiSearchBox
-                  onSelectLocation={handleSelectAutocompletePoi}
-                  mapCenterLngLat={[spotLng, spotLat]}
-                  language={language}
-                  placeholder='[ 🔍 NHẬP TÊN QUÁN HOẶC ĐỊA CHỈ (VD: "CHAY LOVING HUT", "BÁNH CUỐN BÀ HOÀNH"...) ]'
-                  compact={true}
-                />
-
-                <input
-                  id="poi-name"
-                  type="text"
-                  value={spotName}
-                  onChange={(e) => setSpotName(e.target.value)}
-                  placeholder={
-                    language === 'vi'
-                      ? 'Tên quán ăn (VD: Phở Bò Phú Gia)...'
-                      : 'Venue name (e.g., Pho Bo Phu Gia)...'
-                  }
-                  className="w-full min-h-[40px] px-3 bg-[#05050A] border border-[#1F1F2E] text-white font-mono text-xs focus:border-[#00E5FF] focus:outline-none rounded-none"
-                />
-
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    id="poi-lat"
-                    type="number"
-                    step="0.00001"
-                    value={spotLat}
-                    onChange={(e) => setSpotLat(Number(e.target.value))}
-                    aria-label="Latitude"
-                    className="w-full min-h-[38px] px-2.5 bg-[#05050A] border border-[#1F1F2E] text-[#00FF66] font-mono text-xs focus:border-[#00E5FF] focus:outline-none rounded-none"
-                  />
-                  <input
-                    id="poi-lng"
-                    type="number"
-                    step="0.00001"
-                    value={spotLng}
-                    onChange={(e) => setSpotLng(Number(e.target.value))}
-                    aria-label="Longitude"
-                    className="w-full min-h-[38px] px-2.5 bg-[#05050A] border border-[#1F1F2E] text-[#00FF66] font-mono text-xs focus:border-[#00E5FF] focus:outline-none rounded-none"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="grid grid-cols-5 gap-1.5">
-                  {([1, 2, 3, 4, 5] as const).map((starVal) => {
-                    const active = starVal <= spotRating;
-                    return (
-                      <button
-                        key={starVal}
-                        type="button"
-                        onClick={() => setSpotRating(starVal)}
-                        className={`min-h-[36px] bg-[#0D0E17] border flex items-center justify-center gap-1 font-mono text-xs font-bold cursor-pointer rounded-none ${
-                          active
-                            ? 'border-[#00E5FF] text-[#00E5FF]'
-                            : 'border-[#1F1F2E] text-[#8A8FA3]'
-                        }`}
-                      >
-                        <span>{active ? '█' : '░'}</span>
-                        <span>{starVal}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <textarea
-                  id="poi-note"
-                  rows={2}
-                  value={spotNote}
-                  onChange={(e) => setSpotNote(e.target.value)}
-                  placeholder={
-                    language === 'vi'
-                      ? 'Ghi chú hương vị cho phụ đề .SRT và YouTube Chapters...'
-                      : 'Taste notes for .SRT subtitles and AI chapters...'
-                  }
-                  className="w-full p-2.5 bg-[#05050A] border border-[#1F1F2E] text-white font-mono text-xs focus:border-[#00E5FF] focus:outline-none resize-none rounded-none"
-                />
-
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 flex-1 overflow-x-auto">
-                    {FIELD_PRESET_IMAGES.map((preset) => {
-                      const selected = spotImages.includes(preset.url);
-                      return (
-                        <button
-                          key={preset.url}
-                          type="button"
-                          onClick={() => handleToggleImage(preset.url)}
-                          className={`px-2 py-1 bg-[#05050A] border font-mono text-[11px] flex items-center gap-1.5 cursor-pointer shrink-0 rounded-none ${
-                            selected
-                              ? 'border-[#00E5FF] text-white'
-                              : 'border-[#1F1F2E] text-[#8A8FA3]'
-                          }`}
-                        >
-                          <img
-                            src={preset.url}
-                            alt={preset.labelVi}
-                            referrerPolicy="no-referrer"
-                            className="w-5 h-5 object-cover"
-                          />
-                          <span>{language === 'vi' ? preset.labelVi : preset.labelEn}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <input
-                    type="url"
-                    value={customImageUrl}
-                    onChange={(e) => setCustomImageUrl(e.target.value)}
-                    placeholder="Image URL..."
-                    className="w-32 min-h-[32px] px-2 bg-[#05050A] border border-[#1F1F2E] text-white font-mono text-xs rounded-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddCustomImage}
-                    className="min-h-[32px] px-2 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] cursor-pointer rounded-none"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#1F1F2E]">
-              <span className="font-mono text-xs text-[#8A8FA3]">
-                {lastSyncReceipt ? `LAST_SYNC: ${lastSyncReceipt.syncId}` : 'READY_TO_SYNC'}
-              </span>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="submit"
-                  style={{
-                    clipPath:
-                      'polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
-                  }}
-                  className="min-h-[40px] px-4 bg-[#0D0E17] border border-[#00E5FF] text-white hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)] font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all rounded-none"
-                >
-                  <MapPin className="w-4 h-4 text-[#00E5FF] shrink-0" />
-                  <span>{language === 'vi' ? 'Lưu & Ghim Điểm Này' : 'Save & Pin Spot'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleValidatedSyncAndZoom}
-                  disabled={isSyncing}
-                  className="min-h-[40px] px-4 bg-[#0D0E17] border border-[#1F1F2E] text-[#8A8FA3] hover:border-[#00E5FF] hover:text-[#00E5FF] hover:shadow-[0_0_12px_rgba(0,229,255,0.28)] font-mono font-bold text-xs uppercase tracking-wider flex items-center gap-1.5 cursor-pointer transition-all rounded-none"
-                >
-                  <CloudUpload className="w-4 h-4 shrink-0" />
-                  <span>{isSyncing ? 'Syncing...' : 'Sync to Cloud'}</span>
-                </button>
-              </div>
-            </div>
-          </form>
-        )}
-      </div>
+      {isPinDrawerOpen && (
+        <TargetPinningTerminal
+          onAddNode={onAddNode}
+          nodesCount={nodes.length}
+          activeRiderPos={activeRiderPos}
+          deviceTempC={telemetry.deviceTempC}
+          audioPeakDb={telemetry.audioDb}
+          lastSyncId={lastSyncReceipt?.syncId}
+          isSyncing={isSyncing}
+          onSyncToCloud={handleValidatedSyncAndZoom}
+          onClose={() => setIsPinDrawerOpen(false)}
+          onCoordinatesPinned={() => {
+            setEarthZoomTriggerKey((k) => k + 1);
+            if (centralMapRef.current) {
+              centralMapRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }}
+          pinFormRef={pinFormRef}
+        />
+      )}
     </div>
   );
 };

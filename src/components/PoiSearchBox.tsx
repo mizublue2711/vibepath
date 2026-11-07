@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ApiKeyManager } from '../services/apiKeyManager';
 import { parseLocationInput } from '../utils/linkParser';
-import { LanguageCode } from '../data/vibePathData';
+import { useTranslation, LanguageCode } from '../context/LanguageContext';
 import { Search, Crosshair, CornerDownLeft, X, Link2, Loader2 } from 'lucide-react';
 
 export interface SearchResult {
@@ -299,9 +299,10 @@ export const DEFAULT_POI_SEARCH_PLACEHOLDER =
 export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
   onSelectLocation,
   mapCenterLngLat,
-  language = 'vi',
+  language,
   placeholder,
 }) => {
+  const { t } = useTranslation();
   const [query, setQuery] = useState<string>('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -432,10 +433,10 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
     <div ref={containerRef} className="relative w-full max-w-full select-none rounded-none">
       <div className="flex items-center justify-between mb-1.5">
         <span className="font-mono text-[10px] font-bold tracking-widest text-[#8A8FA3] uppercase">
-          [ 01 // GEO_INDEX_LOOKUP ]
+          {t('search.geoIndexLookup')}
         </span>
         <span className="font-mono text-[10px] text-[#8A8FA3] hidden sm:inline">
-          MAPBOX_V6 // PROXIMITY_BIAS_ACTIVE
+          {t('search.proximityBias')}
         </span>
       </div>
 
@@ -460,8 +461,12 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
           }}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder || DEFAULT_POI_SEARCH_PLACEHOLDER}
-          aria-label="Search POI Locations"
+          placeholder={
+            !placeholder || placeholder === DEFAULT_POI_SEARCH_PLACEHOLDER
+              ? t('search.placeholder')
+              : placeholder
+          }
+          aria-label={t('search.ariaSearchInput')}
           className="flex-1 min-w-0 min-h-[40px] px-3 bg-transparent text-[#FFFFFF] font-mono text-xs placeholder:text-[#8A8FA3] focus:outline-none rounded-none"
         />
 
@@ -474,7 +479,7 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
               setIsOpen(false);
             }}
             className="px-2.5 text-[#8A8FA3] hover:text-white flex items-center justify-center cursor-pointer rounded-none"
-            title="Clear search"
+            title={t('search.clearSearch')}
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -493,13 +498,7 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
         >
           <CornerDownLeft className="w-3.5 h-3.5 shrink-0" />
           <span className="hidden sm:inline whitespace-nowrap">
-            {isLoading
-              ? language === 'vi'
-                ? 'ĐANG TÌM...'
-                : 'SEARCHING...'
-              : language === 'vi'
-              ? 'Tìm địa điểm'
-              : 'Find POI'}
+            {isLoading ? t('search.searching') : t('search.findPoi')}
           </span>
         </button>
       </div>
@@ -507,7 +506,7 @@ export const PoiSearchBox: React.FC<PoiSearchBoxProps> = ({
       {isOpen && results.length > 0 && (
         <div
           role="listbox"
-          aria-label="Location Search Results"
+          aria-label={t('search.ariaResultsList')}
           className="absolute left-0 right-0 top-full mt-1 z-50 bg-[#0D0E17] border border-[#1F1F2E] rounded-none divide-y divide-[#1F1F2E] max-h-[320px] overflow-y-auto"
         >
           {results.slice(0, 8).map((item, idx) => {

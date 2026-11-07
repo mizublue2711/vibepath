@@ -18,6 +18,7 @@ import {
   INITIAL_FEEDBACK_REPORTS,
 } from './data/vibePathData';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
+import { LanguageProvider, useTranslation } from './context/LanguageContext';
 import { LiveTelemetryView } from './components/LiveTelemetryView';
 import { EditorStudioTab } from './components/EditorStudioTab';
 import { FeedbackTab } from './components/FeedbackTab';
@@ -42,9 +43,11 @@ const SYNC_STEPS = [
 function AppContent() {
   const { theme, accentColor, fontFamily, setAccentColor, setFontFamily, updateTheme, resetTheme } =
     useTheme();
+  const { lang, setLang, t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState<SubsystemTab>('vlogger');
-  const [language, setLanguage] = useState<LanguageCode>('vi');
+  const language = lang;
+  const setLanguage = setLang;
   const [showQuickSettingsDrawer, setShowQuickSettingsDrawer] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [keyStatus, setKeyStatus] = useState<KeyConnectionStatus>(() =>
@@ -407,20 +410,16 @@ function AppContent() {
         {/* Quick Settings Drawer (Custom Brand Palette, Font Binding & BYOK Settings) */}
         {showQuickSettingsDrawer && (
           <section
-            aria-label="Quick Settings & Brand Theme Drawer"
+            aria-label={t('quickSettings.drawerAriaLabel')}
             className="mb-4 bg-[#0D0E17] border border-[#1F1F2E] p-4 flex flex-col gap-4 rounded-none"
           >
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#1F1F2E] pb-3">
               <div>
                 <h2 className="text-sm font-bold text-white">
-                  {language === 'vi'
-                    ? 'Quick Settings — Nhận diện Thương hiệu (--accent-color, --font-family) & Kết nối BYOK'
-                    : 'Quick Settings — Dynamic Brand Palette (--accent-color, --font-family) & BYOK'}
+                  {t('quickSettings.title')}
                 </h2>
                 <p className="text-xs text-[#8A8FA3] mt-0.5">
-                  {language === 'vi'
-                    ? 'Tự động cập nhật màu nút bấm, vệt sáng đường đi 3D, tab đang chọn và đính kèm vào JSON Payload khi bấm Sync to Cloud.'
-                    : 'Immediately updates buttons, 3D route polyline glow, active tabs, and injects accent_color & font_family into Sync to Cloud webhook payload.'}
+                  {t('quickSettings.description')}
                 </p>
               </div>
 
@@ -435,8 +434,8 @@ function AppContent() {
                     {keyStatus.hasCustomMapKey ||
                     keyStatus.hasCustomDifyKey ||
                     keyStatus.hasCustomGeminiKey
-                      ? 'BYOK Keys (Active)'
-                      : 'Configure BYOK Keys'}
+                      ? t('quickSettings.byokActive')
+                      : t('quickSettings.configureByok')}
                   </span>
                 </button>
 
@@ -446,7 +445,7 @@ function AppContent() {
                   className="min-h-[36px] px-3 bg-[#05050A] border border-[#1F1F2E] hover:border-[#00E5FF] text-white text-xs font-mono-brand flex items-center gap-1.5 cursor-pointer rounded-none"
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-[#00E5FF]" />
-                  <span>Reset Brand</span>
+                  <span>{t('quickSettings.resetBrand')}</span>
                 </button>
 
                 <button
@@ -454,7 +453,7 @@ function AppContent() {
                   onClick={() => setShowQuickSettingsDrawer(false)}
                   className="min-h-[36px] px-3 bg-[#05050A] border border-[#1F1F2E] hover:border-[#FF5252] text-white text-xs font-mono-brand cursor-pointer rounded-none"
                 >
-                  Close
+                  {t('quickSettings.close')}
                 </button>
               </div>
             </div>
@@ -467,7 +466,7 @@ function AppContent() {
                     htmlFor="brand-accent-input"
                     className="text-xs font-bold text-white"
                   >
-                    Brand Accent Color (--accent-color)
+                    {t('quickSettings.brandAccentColor')}
                   </label>
                   <input
                     type="color"
@@ -493,7 +492,7 @@ function AppContent() {
                   htmlFor="brand-font-input"
                   className="text-xs font-bold text-white block"
                 >
-                  Brand Font Family (--font-family)
+                  {t('quickSettings.brandFontFamily')}
                 </label>
                 <input
                   id="brand-font-input"
@@ -512,7 +511,7 @@ function AppContent() {
                     htmlFor="brand-tertiary-input"
                     className="text-xs font-bold text-white"
                   >
-                    GPS & Status Highlight Color
+                    {t('quickSettings.gpsStatusColor')}
                   </label>
                   <input
                     type="color"
@@ -604,7 +603,9 @@ function AppContent() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <LanguageProvider>
+        <AppContent />
+      </LanguageProvider>
     </ThemeProvider>
   );
 }
