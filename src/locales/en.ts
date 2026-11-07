@@ -148,4 +148,13 @@ export const en: LocaleTranslations = {
     brandFontFamily: 'Brand Font Family (--font-family)',
     gpsStatusColor: 'GPS & Status Highlight Color',
   },
+  onboarding: {
+    title: '[ 🚀 VIBEPATH QUICK START GUIDE ]',
+    step1: '📍 Step 1: Search venue in GEO_INDEX_LOOKUP',
+    step2: '📝 Step 2: Add star rating & flavor notes',
+    step3: '🎬 Step 3: Click [ 📍 SAVE & PIN SPOT ] to render 3D route',
+    tryNow: '[ 🎮 TRY NOW ]',
+    guideButton: '[ ❓ GUIDE ]',
+    close: '[ × CLOSE ]',
+  },
 };
