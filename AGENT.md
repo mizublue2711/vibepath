@@ -2,158 +2,113 @@
 
 > **Project Repository**: `https://github.com/mizublue2711/vibepath`  
 > **Project Name**: VibePath (Automated 3D Cinematic Map & AI Script Generator for Food Vloggers)  
-> **Target Platform**: Vite + React + TypeScript + WebGL (Mapbox GL JS v3) + Cloudflare Workers
+> **Production Live Domain**: `https://vibepath.artificialcraft.space/`  
+> **Target Platform**: Vite + React + TypeScript + WebGL (Mapbox GL JS v3) + Cloudflare Workers / Pages
 
 ---
 
-## 1. Directory Tree & File Inventory
+## 1. System Topology & Directory Inventory
 
-All AI Workers (Jules, Cursor, Claude Code, Copilot) MUST strictly adhere to this folder structure and refer to files by their exact relative paths.
+All AI Workers (Jules, Cursor, Claude Code, Copilot) MUST strictly adhere to this directory structure and refer to files by their exact relative paths.
 
-
+```text
 vibepath/
-├── .env.example                     # Sample environment variables configuration
-├── .gitignore                       # Git ignore rules
-├── index.html                       # HTML entry point with font imports
+├── wrangler.toml                    # Cloudflare Workers / Pages deployment config (MUST include [previews])
 ├── package.json                     # Node.js dependencies & build scripts
 ├── tsconfig.json                    # TypeScript compiler configuration
 ├── vite.config.ts                   # Vite bundler configuration
-├── wrangler.toml                    # Cloudflare Workers / Pages deployment config
-│
-├── functions/                       # Cloudflare Workers Serverless API Endpoints
-│   └── api/
-│       └── poi-search.ts            # Backend Proxy endpoint for Mapbox & OSM search
 │
 ├── src/                             # Main Frontend Application Source Code
-│   ├── main.tsx                     # Application entry point (imports Mapbox CSS & React root)
-│   ├── App.tsx                      # Main layout container & view switcher
-│   ├── index.css                    # Global CSS, Tailwind setup & Cybernetic Swiss Brutalism rules
-│   ├── vite-env.d.ts                # Vite environment types declarations
+│   ├── main.tsx                     # Application entry point
+│   ├── App.tsx                      # Main layout container & active view switcher
+│   ├── index.css                    # Global CSS & Cybernetic Swiss Brutalism rules
 │   │
 │   ├── components/                  # React UI Components
-│   │   ├── CyberGlobe3D.tsx         # WebGL 3D Globe, Terrain DEM, Extrusions, Atmosphere & Path rendering
-│   │   ├── PoiSearchBox.tsx         # POI Search Bar with Mapbox Search Box v6 & OSM fallback
-│   │   ├── Navigation.tsx           # Top HUD Header, Telemetry readout & Glowing Render Button
-│   │   ├── SettingsModal.tsx        # BYOK (Bring Your Own Key) configuration modal
-│   │   ├── DistrictBoundaryOverlay.tsx # Administrative district boundary polygon highlight
-│   │   ├── EditorStudio/            # Editor NLE Asset Workspace Sub-components
-│   │   │   ├── StudioLayout.tsx     # Editor Studio main container & panel splitter
-│   │   │   ├── VideoPreview.tsx     # 3D Rendered Video player & canvas preview
-│   │   │   ├── ScriptPanel.tsx      # Voiceover script viewer & subtitle SRT exporter
-│   │   │   └── AssetExporter.tsx    # 1-Click ZIP/XML timeline asset download panel
+│   │   ├── CyberGlobe3D.tsx         # WebGL 3D Globe, Terrain DEM & Path rendering
+│   │   ├── TargetPinningTerminal.tsx # Culinary spot pinning & taste notes terminal
+│   │   ├── PoiSearchBox.tsx         # POI Search Bar with Mapbox & OSM fallback
+│   │   ├── Navigation.tsx           # Top HUD Header & Status indicators
+│   │   ├── OnboardingModal.tsx      # First-visit 3-step Quick Start Guide modal
 │   │   └── UI/                      # Base Reusable Cybernetic Components
-│   │       ├── BrutalistButton.tsx  # Zero-radius sharp button with cyan glow
-│   │       ├── BrutalistCard.tsx    # Panel container with 1px dark border
-│   │       └── TelemetryBadge.tsx   # HUD status indicator badge
-│   │
-│   ├── services/                    # Business Logic & External API Services
-│   │   ├── cinematicFlightEngine.ts # 4-Stage Async Camera Flight sequence controller
-│   │   ├── videoRecorder.ts         # WebGL Canvas 60FPS High-Bitrate MediaRecorder engine
-│   │   ├── globalBoundaryService.ts # Mapbox vector tileset district boundary query service
-│   │   ├── apiKeyManager.ts         # BYOK LocalStorage manager & event dispatcher
-│   │   ├── osmFallbackService.ts    # OpenStreetMap Nominatim fallback search service
-│   │   └── syncCloudService.ts      # Cloudflare / n8n Webhook Cloud Sync payload formatter
 │   │
 │   ├── context/                     # React Context Providers
 │   │   ├── ThemeContext.tsx         # Branding colors, fonts, and UI style context
-│   │   └── FlightStateContext.tsx   # Camera flight stage, active POI & telemetry state
+│   │   └── FlightStateContext.tsx   # Camera flight stage, active POIs & localStorage sync
 │   │
-│   ├── types/                       # TypeScript Type Definitions
-│   │   ├── map.ts                   # Search result, POI, coordinate & boundary types
-│   │   ├── flight.ts                # Flight stage enum, camera parameters & telemetry interfaces
-│   │   └── asset.ts                 # SRT subtitle, XML marker & export asset types
+│   ├── locales/                     # i18n Dictionaries (1:1 Key Parity Mandatory)
+│   │   ├── en.ts                    # English strings
+│   │   └── vi.ts                    # Vietnamese strings
 │   │
-│   └── utils/                       # Utility Functions
-│       ├── bsplineSmooth.ts         # B-Spline GPS coordinate path smoothing algorithm
-│       └── formatters.ts            # Telemetry text, time & coordinate formatting helpers
+│   ├── services/                    # Business Logic & External API Services
+│   │   ├── cinematicFlightEngine.ts # 4-Stage Async Camera Flight sequence controller
+│   │   ├── videoRecorder.ts         # WebGL Canvas 60FPS MediaRecorder engine
+│   │   └── syncCloudService.ts      # Cloudflare / n8n Webhook Cloud Sync formatter
+│   │
+│   └── types/                       # TypeScript Type Definitions
+│       ├── map.ts                   # Search result, POI & coordinate types
+│       └── flight.ts                # Flight stage enum & camera parameters
 │
-└── public/                          # Static Assets & Icons
-    ├── favicon.ico                  # App favicon
-    └── logo.svg                     # VibePath Cyberpunk logo
-_________________________________________________
+└── scripts/                         # Verification & Validation Scripts
+    ├── test-i18n.ts                 # 1:1 key parity checker
+    └── verify-live.ts               # Headless Playwright live production domain verifier
+```
+2. Component Lineage & Multi-File Wiring Contract
+To prevent "stale code / invisible updates" on production:
+Atomic Multi-File Commits:
+Modifying a sub-component (e.g., TargetPinningTerminal.tsx) REQUIRES updating its parent layout in src/App.tsx and state provider in src/context/FlightStateContext.tsx within the SAME COMMIT.
+Context State Hydration:
+FlightStateContext.tsx MUST manage pinnedLocations state and automatically sync with localStorage.setItem('vibepath_pinned_session', ...) upon updates.
+Decoupled Camera Engine:
+Selecting/pinning POIs during live editing MUST use low-altitude ground glide (map.easeTo() at zoom ~16, pitch 45°).
+High-altitude 4-stage Space Orbit sequences MUST ONLY trigger on explicit action buttons ([ 🎬 RENDER 60FPS VIDEO ], [ 🪐 ORBIT VIEW ], [ ✈️ FLY OVER ]).
 
-2. Core Modules & Component Responsibilities
-File Path
-Primary Responsibility
-Critical Rules & Dependencies
-src/components/CyberGlobe3D.tsx
-WebGL 3D Globe Initialization, Terrain DEM (1.6x), 3D Building Extrusions, Atmospheric Shader, Radar Laser Column at POI.
-MUST initialize Mapbox with preserveDrawingBuffer: true. MUST handle container map.resize() via ResizeObserver.
-src/services/cinematicFlightEngine.ts
-4-Stage Camera Flight Sequence: Stage 1 (Space Orbit + 3s spin) → Stage 2 (Descent) → Stage 3 (District Focus) → Stage 4 (3D Street Flyover).
-Uses easeInOutCubic easing. Flight duration: ~12.5 seconds total.
-src/services/videoRecorder.ts
-Captures WebGL canvas stream at 60FPS. Triggers auto-download .webm / .mp4.
-Sets videoBitsPerSecond: 20000000 (20 Mbps) to avoid blurry HUD text.
-src/components/PoiSearchBox.tsx
-Free-text search bar for restaurants/food venues & geographic regions.
-Mapbox Search Box v6 primary + OpenStreetMap Nominatim fallback when Mapbox returns 0 results.
-src/services/globalBoundaryService.ts
-Administrative District Boundary Highlight (mapbox://mapbox.boundaries-adm2-v4).
-Sets dynamic layer filter to outline organic city/district borders in #00E5FF dashed stroke during Stage 3.
-src/components/Navigation.tsx
-Top HUD Header containing status indicators and [ 🎬 1-CLICK CINEMATIC RENDER ] action button.
-Styled with subtle glowing Electric Cyan border (box-shadow: 0 0 12px rgba(0, 229, 255, 0.35)).
-src/services/apiKeyManager.ts
-Manages BYOK (Bring Your Own Key) in localStorage.
-Dispatches vibepath_apikeys_updated custom event on save.
-functions/api/poi-search.ts
-Cloudflare Worker Serverless Proxy Endpoint for backend search.
-Holds SYSTEM_MAPBOX_TOKEN server-side to conceal keys from frontend client.
+3. Deployment Configuration Standard (wrangler.toml)
+All Cloudflare deployment configs MUST include an explicit [previews] block to prevent wrangler preview build failures:
+name = "vibepath-web-client"
+compatibility_date = "2026-11-01"
+pages_build_output_dir = "./dist"
 
-_________________________________________________
+[assets]
+directory = "./dist"
 
-3. UI/UX Design System: Cybernetic Swiss Brutalism
-When modifying or creating any React UI components, AI Workers MUST follow these visual guidelines:
-Zero Border Radius Rule (Mandatory):
-Enforce border-radius: 0px !important on ALL elements (buttons, search inputs, modal cards, dropdowns, badges). No rounded corners allowed anywhere.
+[build]
+command = "npm run build"
+watch_dir = "src"
+
+[vars]
+ENVIRONMENT = "production"
+ENABLE_OSM_FALLBACK = "true"
+
+# MANDATORY PREVIEWS BLOCK FOR WRANGLER 4.x+
+[previews]
+
+[previews.vars]
+ENVIRONMENT = "preview"
+ENABLE_OSM_FALLBACK = "true"
+
+4. Design System Protocol: Cybernetic Swiss Brutalism
+When modifying or creating any React UI components, AI Workers MUST strictly follow these visual rules:
+Zero Border Radius Rule (Mandatory): border-radius: 0px !important on ALL elements. No soft rounded corners allowed.
 Color Palette:
 Primary Accent: #00E5FF (Electric Cyan)
 Secondary Accent: #5322FF (Quantum Violet)
-Status Accent: #00FF66 (Satellite Green)
-Background: #080A0F (Terminal Black) / #0D1017 (Panel Slate)
-Borders: 1px solid #1F1F2E (Subtle) / 1px solid #00E5FF (Active)
-Typography:
-Font Family: 'JetBrains Mono', 'Space Grotesk', monospace for all telemetry readouts, status codes, and coordinate readouts.
-Bracket Enclosures:
-Wrap UI labels and status codes in bracket notation: [ 🟢 GPS_LOCKED • ±1.2m ], [ 01 // POI ], [ 🎬 1-CLICK CINEMATIC RENDER ].
-_________________________________________________
+Telemetry Sensor: #00FF66 (Satellite Green)
+Void Background: #05050A (Obsidian Black)
+Panel Surface: #0D0E17 / Borders: 1px solid #1F1F2E
+Bracket Syntax & Typography:
+Wrap status readouts and titles in mechanical brackets: [ 01 // POI ], [ 🟢 GNSS_LOCKED ], [ 🗑️ CLEAR SESSION ].
+Fonts: Space Grotesk for headers, JetBrains Mono for telemetry and coordinate values.
 
-4. Developer Workflows & Safety Rules for AI Workers
-A. Environment Variables & Vite Build Rule
-Public API keys use the VITE_ prefix: import.meta.env.VITE_MAPBOX_TOKEN.
-CRITICAL: Vite bakes import.meta.env variables into static JS at build time. When updating environment secrets on Cloudflare Dashboard, a re-deployment / retry build MUST be triggered for changes to take effect.
-B. Mapbox WebGL Canvas Protection
-Never remove preserveDrawingBuffer: true from mapboxgl.Map initialization in CyberGlobe3D.tsx. Removing it causes the video recorder to capture black/blank screens.
-Always include ResizeObserver on mapContainer element to prevent map canvas clipping issues.
-C. Search Resilience & Dual-Engine Fallback
-PoiSearchBox.tsx MUST first attempt Mapbox Search Box API v6 with proximity bias.
-If Mapbox returns 0 results for Vietnamese food venues (e.g., "BÁNH CUỐN BÀ HOÀNH"), automatically fall back to OpenStreetMap Nominatim API (countrycodes=vn).
-D. Cloud Sync Payload Contract
-When triggering syncCloudService.ts, always attach the full payload including branding, flight_telemetry, poi_coordinates, and voiceover_language.
-_________________________________________________
+5. Micro-Tasking & AI Execution Protocols
+Scope Limit per Ticket:
+If a task involves >3 files or >150 lines of diff, split it into independent sub-tasks (e.g., Sub-Task 1: i18n & UI State, Sub-Task 2: Form Reset, Sub-Task 3: LocalStorage & 3D Line Rendering).
+Fresh Session Protocol:
+After completing 2 heavy sub-tasks, request a fresh chat context window to prevent LLM context degradation or zombie test processes.
 
-5. Definition of Done (DoD) Checklist for Code Modifications
-Before committing code, AI Workers MUST verify:
-[ ] Code builds cleanly with npm run build with zero TypeScript or Vite errors.
-[ ] No border-radius values greater than 0px exist in new CSS/Tailwind classes.
-[ ] CyberGlobe3D.tsx maintains canvas sizing across window resizes via map.resize().
-[ ] Search functionality returns valid coordinates for both global landmarks and local Vietnamese food stalls.
-[ ] All file modifications update the exact paths specified in Section 1 of this document.
-_________________________________________________
-
-6. Internationalization (i18n) & Dual-Locale Enforcement Rules
-
-All AI Workers (Jules, Cursor, Claude Code) MUST strictly comply with the following localization protocol:
-
-#1. **Zero Hardcoded Strings in JSX (Mandatory)**:
-   - Hardcoding raw text strings directly inside React component JSX files (e.g. `Navigation.tsx`, `PoiSearchBox.tsx`, `TargetPinningTerminal.tsx`, `EditorStudio/*`) is STRICTLY PROHIBITED.
-   - All UI labels, bracket titles, button text, HUD badges, input placeholders, tooltips, and modal descriptions MUST be managed centrally inside `src/locales/vi.ts` and `src/locales/en.ts`.
-
-#2. **Atomic Dual-Dictionary Synchronous Updates**:
-   - Whenever an AI Worker adds, edits, or refactores any UI text or feature, it MUST update BOTH `src/locales/vi.ts` AND `src/locales/en.ts` in the exact same turn/commit.
-   - Every single key in `vi.ts` MUST have a 1:1 matching key and structure in `en.ts`. No missing or mismatched keys are allowed.
-
-#3. **Dynamic Translation Hook Standard**:
-   - React components MUST subscribe to language changes via `LanguageContext` (or `useTranslation()` hook).
-   - Render UI text dynamically using key lookups: `{t('section.key_name')}` or `locales[lang].section.key_name`.
+6. Definition of Done (DoD) & Verification Protocol
+Before declaring any task complete, AI Workers MUST execute and verify the following pipeline:
+[ ] Local Compilation: npm run build exits cleanly with code 0 (zero TypeScript or Vite errors).
+[ ] Translation Parity: bun run scripts/test-i18n.ts passes with 100% 1:1 key parity between en.ts and vi.ts.
+[ ] Live Production Verification: Playwright test verified directly against https://vibepath.artificialcraft.space/ (NOT local dev server).
+[ ] Zero Radius Audit: DOM inspection confirms all newly added elements compute border-radius: 0px.
+[ ] Atomic Git Push: Code merged directly to main with all parent/child components wired correctly.
